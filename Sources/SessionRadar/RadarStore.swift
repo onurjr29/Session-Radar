@@ -7,6 +7,10 @@ import UserNotifications
     var sessions: [SessionSnapshot] = []
     var conflicts: [Conflict] = []
     var lastError: String?
+    /// yalnızca değiştiğinde atanır; her saniye pencereyi yeniden çizdirmesin
+    var histories: [String: SessionHistory] = [:]
+    /// pencerede seçili session; gruplama kuyruğunda öncelikli
+    var selectedSessionId: String?
 
     private let paths = RadarPaths.fromEnvironment()
     private let engine: Engine
@@ -14,6 +18,7 @@ import UserNotifications
     @ObservationIgnored private var lastLookup = Date.distantPast
     @ObservationIgnored private var started = false
     @ObservationIgnored private var slowRunning = false
+    @ObservationIgnored private var groupingRunning = false
 
     init() { engine = Engine(paths: paths) }
 
@@ -84,7 +89,22 @@ import UserNotifications
         let r = await engine.tick(now: Date())
         sessions = r.sessions
         conflicts = r.conflicts
+        if histories != r.histories { histories = r.histories }
         for n in r.notifications { post(n) }
+        groupIfIdle()
+    }
+
+    /// Aynı anda tek gruplama işi; Haiku çağrısı ana actor'ü bloklamaz.
+    private func groupIfIdle() {
+        guard !groupingRunning else { return }
+        groupingRunning = true
+        Task {
+            defer { groupingRunning = false }
+            guard let claude = await claude(),
+                  let job = await engine.nextJob(selected: selectedSessionId, now: Date()) else { return }
+            let output = try? await runAsk(prompt: job.prompt, claudePath: claude, paths: paths)
+            await engine.finishJob(sessionId: job.sessionId, output: output)
+        }
     }
 
     private func post(_ n: RadarNotification) {
@@ -105,6 +125,20 @@ private func mtime(_ url: URL) -> Date? {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
 }
 
+/// Session'ın istek geçmişi ve gruplama durumu.
+private struct HistoryState {
+    var path: String?
+    var mtime: Date?
+    var cursor = HistoryCursor()
+    var requests: [Request] = []
+    var topics: [Topic] = []
+    var grouped = 0
+    var lastRunAt: Date?
+    var lastRunLeftBacklog = false
+    /// Haiku'ya gönderilmiş, cevabı beklenen parça
+    var job: [Request]?
+}
+
 /// Disk okuyan ve durum tutan her şey burada, ana thread dışında çalışır.
 private actor Engine {
     private let paths: RadarPaths
@@ -121,6 +155,9 @@ private actor Engine {
     private var transcripts: [String: (path: String, mtime: Date?, value: TranscriptInfo)] = [:]
     private var previous: [String: SessionState]?
     private var previousPairs: Set<String> = []
+    private var histories: [String: HistoryState] = [:]
+    /// son tick'in görüntü sırası; gruplama adayları bu sırayla
+    private var groupOrder: [(id: String, state: SessionState, alive: Bool)] = []
 
     init(paths: RadarPaths) {
         self.paths = paths
@@ -129,7 +166,7 @@ private actor Engine {
 
     func prune() {
         let fm = FileManager.default, cutoff = Date().addingTimeInterval(-7 * 86400)
-        for dir in [paths.eventsDir, paths.statusDir] {
+        for dir in [paths.eventsDir, paths.statusDir, paths.topicsDir] {
             for url in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             where (mtime(url) ?? .distantFuture) < cutoff {
                 try? fm.removeItem(at: url)
@@ -154,29 +191,70 @@ private actor Engine {
         (statuses[sessionId]?.value, transcripts[sessionId]?.value.dialogue ?? [])
     }
 
-    func tick(now: Date) -> (sessions: [SessionSnapshot], conflicts: [Conflict], notifications: [RadarNotification]) {
+    func tick(now: Date) -> (sessions: [SessionSnapshot], conflicts: [Conflict], notifications: [RadarNotification],
+                             histories: [String: SessionHistory]) {
         ingest()
         registry = loadRegistry(dir: registryDir)
         let list = candidates(now: now)
         seenAlive.formUnion(list.filter(\.seenAlive).map(\.id))
         var kept: [SessionSnapshot] = []
         for c in list {
+            let info = transcript(c.id, hint: c.activity?.transcriptPath)
             let snap = buildSnapshot(SessionInputs(
                 sessionId: c.id, agent: c.agent, registry: c.registry, alive: c.alive, seenAlive: c.seenAlive,
                 activity: c.activity, status: status(c.id),
-                transcript: transcript(c.id, hint: c.activity?.transcriptPath), repo: repos[c.cwd], lastSeen: now))
+                transcript: info, repo: repos[c.cwd], lastSeen: now, topics: history(c.id).topics))
             if shouldKeep(snap, alive: c.alive, now: now) { kept.append(snap) }
         }
         let ids = Set(list.map(\.id))
         statuses = statuses.filter { ids.contains($0.key) }
         transcripts = transcripts.filter { ids.contains($0.key) }
+        histories = histories.filter { ids.contains($0.key) }
 
         let sessions = sortForDisplay(kept)
+        let alive = Dictionary(list.map { ($0.id, $0.alive) }, uniquingKeysWith: { a, _ in a })
+        groupOrder = sessions.map { ($0.id, $0.state, alive[$0.id] ?? false) }
+        let shown = Dictionary(sessions.compactMap { s in
+            histories[s.id].map { (s.id, SessionHistory(requests: $0.requests, topics: $0.topics, grouping: $0.job != nil)) }
+        }, uniquingKeysWith: { a, _ in a })
         let conflicts = findConflicts(sessions)
         let notes = transitions(previous: previous, previousConflictPairs: previousPairs, current: sessions, conflicts: conflicts)
         previous = Dictionary(sessions.map { ($0.id, $0.state) }, uniquingKeysWith: { a, _ in a })
         previousPairs = Set(conflicts.map(\.pairKey))
-        return (sessions, conflicts, notes)
+        return (sessions, conflicts, notes, shown)
+    }
+
+    /// Seçilen session'ın gruplanmamış isteklerinden ilk parça ve onun prompt'u.
+    func nextJob(selected: String?, now: Date) -> (sessionId: String, prompt: String)? {
+        let cands = groupOrder.compactMap { o in
+            histories[o.id].map {
+                GroupingCandidate(id: o.id, ungrouped: $0.requests.count - $0.grouped, state: o.state, alive: o.alive,
+                                  lastRunAt: $0.lastRunAt, lastRunLeftBacklog: $0.lastRunLeftBacklog)
+            }
+        }
+        guard let id = nextGroupingJob(cands, selected: selected, now: now), let h = histories[id],
+              let chunk = chunkRequests(Array(h.requests.dropFirst(h.grouped))).first else { return nil }
+        histories[id]?.job = chunk
+        return (id, buildTopicPrompt(existing: h.topics, requests: chunk))
+    }
+
+    /// Haiku cevabını işler; geçersizse konular aynen kalır, yeniden deneme 120 sn beklemesine takılır.
+    func finishJob(sessionId id: String, output: String?) {
+        // session listeden düştüyse ya da transcript küçüldüyse cevap artık geçersiz
+        guard var h = histories[id], let chunk = h.job else { return }
+        let now = Date()
+        h.job = nil
+        h.lastRunAt = now
+        h.lastRunLeftBacklog = false
+        if let output, let response = parseTopicResponse(output),
+           let merged = mergeTopics(existing: h.topics, response: response, newRequests: chunk) {
+            h.topics = merged
+            h.grouped += chunk.count
+            h.lastRunLeftBacklog = h.grouped < h.requests.count
+            try? saveTopicFile(TopicFile(sessionId: id, grouped: h.grouped, topics: merged, updatedAt: now),
+                               to: paths.topicFile(id))
+        }
+        histories[id] = h
     }
 
     private func ingest() {
@@ -207,5 +285,29 @@ private actor Engine {
         let value = readTranscriptTail(url)
         transcripts[sid] = (path, m, value)
         return value
+    }
+
+    /// transcript() sonrası çağrılır: yalnızca yeni satırları okur; ilk görüşte konu dosyasını yükler.
+    private func history(_ sid: String) -> HistoryState {
+        // sözlükten çıkarılır ki diziler kopyalanmadan yerinde değişsin
+        var h: HistoryState
+        if let cached = histories.removeValue(forKey: sid) { h = cached } else {
+            let file = loadTopicFile(paths.topicFile(sid))
+            h = HistoryState(topics: file?.topics ?? [], grouped: file?.grouped ?? 0)
+        }
+        if let t = transcripts[sid], t.path != h.path || t.mtime != h.mtime {
+            if t.path != h.path { h.cursor = HistoryCursor(); h.requests = [] }
+            let r = readRequests(URL(fileURLWithPath: t.path), from: h.cursor)
+            if r.truncated {
+                // dosya küçüldü: konular silinir, baştan gruplanır
+                h.requests = []; h.topics = []; h.grouped = 0; h.job = nil
+                try? FileManager.default.removeItem(at: paths.topicFile(sid))
+            }
+            if let reply = r.trailingReply, !h.requests.isEmpty { h.requests[h.requests.count - 1].reply = reply }
+            h.requests += r.requests
+            h.cursor = r.cursor; h.path = t.path; h.mtime = t.mtime
+        }
+        histories[sid] = h
+        return h
     }
 }
