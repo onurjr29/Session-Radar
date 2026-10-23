@@ -63,7 +63,7 @@ Session'lar ilerledikçe konu değiştiriyor. Onur bu bilgilerin, session kapana
 - Üst tasarımın kısıtları geçerli: Swift 6, üçüncü taraf bağımlılık yok, `RadarCore` yalnızca Foundation kullanır, UI metinleri Türkçe.
 - Konuşma kayıtları çok büyük olabilir (birkaç MB). Okuma artımlı yapılır: her transcript için bir byte offset tutulur ve yalnızca yeni satırlar ayrıştırılır.
 - **Transcript yapısı (doğrulandı):** Her içerik bloğu ayrı bir satırdır.
-  - Kullanıcı isteği: `type == "user"` olan, `isMeta` alanı `true` olmayan ve `message.content` alanı string olan satır. Satırda `timestamp` alanı da var.
+  - Kullanıcı isteği: `type == "user"` olan ve `isMeta` alanı `true` olmayan satır. `message.content` ya string olur, ya da görselli isteklerde `text` ve `image` bloklarından oluşan bir dizi (ayrıntı için "İstek sayılan satırlar" bölümüne bakınız). Satırda `timestamp` alanı da var.
   - Claude'un cevap metni: `type == "assistant"` olan satırlardaki `text` blokları.
 
 ## Tasarım kararları (Claude'un kararı, Onur onayladı)
