@@ -134,3 +134,30 @@ private func event(_ name: String, tool: String? = nil, target: String? = nil, c
     #expect(st.claims.keys.sorted() == [repo] && st.claims[repo]?.count == 2)
     #expect(Array(st.pushes.keys) == ["/r/a"])
 }
+
+private func incoming(head: String = "h1", authors: [String] = ["Anıl Eren Candan"], files: [String] = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"]) -> IncomingPush {
+    IncomingPush(upstream: "origin/main", head: head, count: 2, authors: authors,
+                 latestAt: Date(timeIntervalSince1970: 52_320), files: files)  // 14:32 UTC
+}
+
+@Test func pushNoteMatchesSpec() {
+    let note = pushNote(repoName: "eventpal-mobile", push: incoming(), timeZone: TimeZone(identifier: "UTC")!)
+    #expect(note == "Push notu (eventpal-mobile): origin/main dalında yerelde olmayan 2 commit var (Anıl Eren Candan, 14:32). Değişen dosyalar: a.ts, b.ts, c.ts +2. Devam etmeden önce `git pull --rebase --autostash` çalıştır; çakışma çıkarsa `git rebase --abort` ile geri dön ve kullanıcıya sor.")
+    let many = pushNote(repoName: "r", push: incoming(authors: ["A", "B", "C", "D", "E"]), timeZone: TimeZone(identifier: "UTC")!)
+    #expect(many.contains("(A, B, C +2, 14:32)"))
+}
+
+@Test func pushNotificationsOncePerHead() {
+    func sighting(_ head: String, overlap: Int = 0) -> PushSighting {
+        PushSighting(root: "/r", repoName: "mobile", branch: "main", push: incoming(head: head), overlap: overlap)
+    }
+    let first = pushNotifications([sighting("h1")], notified: [])
+    #expect(first.notes.count == 1)
+    #expect(first.notes[0].id == "push:/r:h1")
+    #expect(first.notes[0].title == "mobile · main: 2 yeni commit")
+    #expect(first.notes[0].body == "Anıl Eren Candan")
+    #expect(pushNotifications([sighting("h1")], notified: first.notified).notes.isEmpty)
+    let next = pushNotifications([sighting("h2", overlap: 2)], notified: first.notified)
+    #expect(next.notes.count == 1)
+    #expect(next.notes[0].body == "Anıl Eren Candan · senin değiştirdiğin 2 dosyaya dokunuyor")
+}

@@ -118,3 +118,69 @@ private func tempClonedRepo() throws -> (clone: URL, bare: URL) {
     #expect(findConflicts([s("A", "/r", .turnDone), s("B", "/r", .working)]).map(\.pairKey) == ["A|B"])
     #expect(findConflicts([s("A", "/r1", .closed), s("B", "/r2", .working)]).map(\.pairKey) == ["A|B"])
 }
+
+/// Bare remote + iki klon; B'nin yazarı "Anıl". A, B'nin push'unu henüz görmedi.
+private func remotePair() throws -> (a: URL, b: URL) {
+    let bare = try uniqueDir("bare")
+    try sh(["init", "-q", "--bare", "-b", "main"], in: bare)
+    let a = try uniqueDir("a")
+    try sh(["init", "-q", "-b", "main"], in: a)
+    try configure(a)
+    try sh(["remote", "add", "origin", bare.path], in: a)
+    try "a".write(to: a.appending(path: "a.txt"), atomically: true, encoding: .utf8)
+    try sh(["add", "-A"], in: a)
+    try sh(["commit", "-q", "-m", "init"], in: a)
+    try sh(["push", "-q", "-u", "origin", "main"], in: a)
+    let b = try uniqueDir("b")
+    try sh(["clone", "-q", bare.path, b.path], in: b)
+    try sh(["config", "user.email", "b@example.com"], in: b)
+    try sh(["config", "user.name", "Anıl"], in: b)
+    return (a, b)
+}
+
+private func commitFile(_ name: String, in dir: URL) throws {
+    try name.write(to: dir.appending(path: name), atomically: true, encoding: .utf8)
+    try sh(["add", "-A"], in: dir)
+    try sh(["commit", "-q", "-m", name], in: dir)
+}
+
+@Test func incomingDetectsRemoteCommitsAndAuthors() throws {
+    let (a, b) = try remotePair()
+    try commitFile("b.txt", in: b)
+    try sh(["push", "-q"], in: b)
+    #expect(fetchUpstream(cwd: a.path))
+    let p = try #require(incomingPush(cwd: a.path))
+    #expect(p.upstream == "origin/main")
+    #expect(p.count == 1)
+    #expect(p.authors == ["Anıl"])
+    #expect(p.files == ["b.txt"])
+    #expect(p.head.count == 40)
+}
+
+@Test func noIncomingWhenUpToDateOrOnlyAhead() throws {
+    let (a, b) = try remotePair()
+    try commitFile("b.txt", in: b)
+    try sh(["push", "-q"], in: b)
+    #expect(fetchUpstream(cwd: a.path))
+    try sh(["pull", "-q", "--ff-only"], in: a)
+    #expect(incomingPush(cwd: a.path) == nil)
+    try commitFile("local.txt", in: a)
+    #expect(incomingPush(cwd: a.path) == nil)
+}
+
+@Test func noIncomingWithoutUpstreamOrDetached() throws {
+    let (a, b) = try remotePair()
+    try commitFile("b.txt", in: b)
+    try sh(["push", "-q"], in: b)
+    #expect(fetchUpstream(cwd: a.path))
+    try sh(["checkout", "-q", "--detach"], in: a)
+    #expect(incomingPush(cwd: a.path) == nil)
+    try sh(["checkout", "-q", "-b", "yeni"], in: a)
+    #expect(incomingPush(cwd: a.path) == nil)
+}
+
+@Test func fetchFailsOnUnreachableRemote() throws {
+    let dir = try tempGitRepo()
+    try sh(["remote", "add", "origin", "/nonexistent/x.git"], in: dir)
+    #expect(!fetchUpstream(cwd: dir.path, timeout: 10))
+}

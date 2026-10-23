@@ -125,3 +125,33 @@ public func teamHook(_ e: HookEvent, state: TeamState?, delivered: TeamDelivered
     }
     return r
 }
+
+public func pushNote(repoName: String, push: IncomingPush, timeZone: TimeZone = .current) -> String {
+    func more(_ n: Int) -> String { n > 0 ? " +\(n)" : "" }
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = timeZone; f.dateFormat = "HH:mm"
+    let who = push.authors.prefix(3).map { teamText($0, max: 40) }.joined(separator: ", ") + more(push.authors.count - 3)
+    let files = push.files.prefix(3).map { teamText($0, max: 80) }.joined(separator: ", ") + more(push.files.count - 3)
+    return "Push notu (\(teamText(repoName, max: 80))): \(teamText(push.upstream, max: 80)) dalında yerelde olmayan \(push.count) commit var (\(who), \(f.string(from: push.latestAt))). Değişen dosyalar: \(files). Devam etmeden önce `git pull --rebase --autostash` çalıştır; çakışma çıkarsa `git rebase --abort` ile geri dön ve kullanıcıya sor."
+}
+
+public struct PushSighting: Equatable, Sendable {
+    public var root: String; public var repoName: String; public var branch: String
+    public var push: IncomingPush; public var overlap: Int
+    public init(root: String, repoName: String, branch: String, push: IncomingPush, overlap: Int) {
+        self.root = root; self.repoName = repoName; self.branch = branch; self.push = push; self.overlap = overlap
+    }
+}
+
+public func pushNotifications(_ s: [PushSighting], notified: Set<String>) -> (notes: [RadarNotification], notified: Set<String>) {
+    var seen = notified
+    var notes: [RadarNotification] = []
+    for x in s {
+        let id = "push:\(x.root):\(x.push.head)"
+        guard seen.insert(id).inserted else { continue }
+        let body = x.push.authors.map { teamText($0, max: 40) }.joined(separator: ", ")
+            + (x.overlap > 0 ? " · senin değiştirdiğin \(x.overlap) dosyaya dokunuyor" : "")
+        notes.append(RadarNotification(id: id, title: "\(x.repoName) · \(x.branch): \(x.push.count) yeni commit", body: body))
+    }
+    return (notes, seen)
+}

@@ -44,10 +44,11 @@ public struct RepoInfo: Equatable, Sendable {
     public var pending: Set<String>
 }
 
-private func run(_ git: String, _ args: [String], cwd: String) -> Data? {
+private func run(_ git: String, _ args: [String], cwd: String,
+                 environment extra: [String: String] = [:], timeout: TimeInterval = 10) -> Data? {
     // arka plan poller'ı index.lock almasın
-    let env = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }
-    guard let r = runProcess(git, ["-C", cwd] + args, environment: env, timeout: 10), r.status == 0 else { return nil }
+    let env = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }.merging(extra) { $1 }
+    guard let r = runProcess(git, ["-C", cwd] + args, environment: env, timeout: timeout), r.status == 0 else { return nil }
     return r.stdout
 }
 
@@ -67,6 +68,41 @@ public func repoInfo(cwd: String, git: String = "/usr/bin/git") -> RepoInfo? {
         ?? run(git, ["diff", "--name-only", "-z", "origin/HEAD...HEAD"], cwd: cwd)
     if let d = unpushed { pending.formUnion(parseNulPaths(d, porcelain: false)) }
     return RepoInfo(toplevel: top, key: key, name: name, branch: branch, pending: pending)
+}
+
+public struct IncomingPush: Equatable, Sendable {
+    public var upstream: String
+    public var head: String
+    public var count: Int
+    public var authors: [String]
+    public var latestAt: Date
+    public var files: [String]
+}
+
+public func fetchUpstream(cwd: String, git: String = "/usr/bin/git", timeout: TimeInterval = 30) -> Bool {
+    run(git, ["fetch", "--quiet", "--no-tags", "--no-recurse-submodules"], cwd: cwd,
+        environment: ["GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o ConnectTimeout=10"],
+        timeout: timeout) != nil
+}
+
+/// Upstream'de olup yerelde olmayan commit'ler; upstream yoksa, HEAD detached ise ya da yerel ileride ise nil.
+public func incomingPush(cwd: String, git: String = "/usr/bin/git") -> IncomingPush? {
+    func text(_ args: [String]) -> String? {
+        run(git, args, cwd: cwd).map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+    guard let upstream = text(["rev-parse", "--abbrev-ref", "@{upstream}"]), !upstream.isEmpty,
+          run(git, ["merge-base", "--is-ancestor", "@{upstream}", "HEAD"], cwd: cwd) == nil,
+          let head = text(["rev-parse", "@{upstream}"]), !head.isEmpty,
+          let count = text(["rev-list", "--count", "HEAD..@{upstream}"]).flatMap(Int.init), count > 0,
+          let at = text(["log", "-1", "--format=%ct", "@{upstream}"]).flatMap(TimeInterval.init)
+    else { return nil }
+    var authors: [String] = []
+    for a in (text(["log", "--format=%an", "HEAD..@{upstream}"]) ?? "").split(separator: "\n").map(String.init)
+    where !authors.contains(a) { authors.append(a) }
+    let files = run(git, ["-c", "core.quotePath=false", "diff", "--name-only", "-z", "HEAD...@{upstream}"], cwd: cwd)
+        .map { parseNulPaths($0, porcelain: false).sorted() } ?? []
+    return IncomingPush(upstream: upstream, head: head, count: count, authors: authors,
+                        latestAt: Date(timeIntervalSince1970: at), files: files)
 }
 
 /// Var olmayan yolda (silinmiş dosya) en derin var olan atayı çözüp kalanı geri ekler.
