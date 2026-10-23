@@ -51,9 +51,16 @@ private func run(_ git: String, _ args: [String], cwd: String) -> Data? {
     let out = Pipe()
     p.standardOutput = out
     p.standardError = FileHandle.nullDevice
+    p.standardInput = FileHandle.nullDevice
+    // arka plan poller'ı index.lock almasın
+    p.environment = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }
     do { try p.run() } catch { return nil }
+    // takılan git 10 sn sonra öldürülür; stdout EOF'a kadar okunur
+    let killer = DispatchWorkItem { if p.isRunning { p.terminate() } }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: killer)
     let data = out.fileHandleForReading.readDataToEndOfFile()
     p.waitUntilExit()
+    killer.cancel()
     return p.terminationStatus == 0 ? data : nil
 }
 
@@ -66,7 +73,7 @@ public func repoInfo(cwd: String, git: String = "/usr/bin/git") -> RepoInfo? {
     let name = key.split(separator: "/").last.map(String.init) ?? key
     let branch = text(["branch", "--show-current"]).flatMap { $0.isEmpty ? nil : $0 }
     var pending = Set<String>()
-    if let d = run(git, ["-c", "core.quotePath=false", "status", "--porcelain", "-z"], cwd: cwd) {
+    if let d = run(git, ["-c", "core.quotePath=false", "status", "--porcelain", "-uall", "-z"], cwd: cwd) {
         pending.formUnion(parseNulPaths(d, porcelain: true))
     }
     let unpushed = run(git, ["diff", "--name-only", "-z", "@{upstream}...HEAD"], cwd: cwd)
@@ -75,11 +82,22 @@ public func repoInfo(cwd: String, git: String = "/usr/bin/git") -> RepoInfo? {
     return RepoInfo(toplevel: top, key: key, name: name, branch: branch, pending: pending)
 }
 
+/// Var olmayan yolda (silinmiş dosya) en derin var olan atayı çözüp kalanı geri ekler.
+private func resolveExisting(_ path: String) -> String {
+    var url = URL(fileURLWithPath: path)
+    var tail: [String] = []
+    while !FileManager.default.fileExists(atPath: url.path), url.path != "/" {
+        tail.insert(url.lastPathComponent, at: 0)
+        url = url.deletingLastPathComponent()
+    }
+    return tail.reduce(url.resolvingSymlinksInPath()) { $0.appending(path: $1) }.path
+}
+
 public func pendingTouched(_ touched: Set<String>, repo: RepoInfo) -> Set<String> {
     let root = URL(fileURLWithPath: repo.toplevel).resolvingSymlinksInPath().path + "/"
     var rel = Set<String>()
     for t in touched {
-        let p = URL(fileURLWithPath: t).resolvingSymlinksInPath().path
+        let p = resolveExisting(t)
         if p.hasPrefix(root) { rel.insert(String(p.dropFirst(root.count))) }
     }
     return rel.intersection(repo.pending)

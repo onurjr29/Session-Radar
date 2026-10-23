@@ -92,3 +92,18 @@ private func tempClonedRepo() throws -> (clone: URL, bare: URL) {
     let c = findConflicts([s("S1", "k", ["a", "b"]), s("S2", "k", ["b", "c"]), s("S3", "k2", ["b"]), s("S4", nil, ["b"])])
     #expect(c == [Conflict(a: "S1", b: "S2", files: ["b"])])
 }
+
+@Test func untrackedDirectoryListsFiles() throws {
+    let dir = try tempGitRepo()
+    try FileManager.default.createDirectory(at: dir.appending(path: "yeni"), withIntermediateDirectories: true)
+    try "x".write(to: dir.appending(path: "yeni/x.swift"), atomically: true, encoding: .utf8)
+    let info = try #require(repoInfo(cwd: dir.path))
+    #expect(info.pending.contains("yeni/x.swift"))
+}
+
+@Test func deletedFileStillMatchesTouched() throws {
+    let dir = try tempGitRepo()
+    try FileManager.default.removeItem(at: dir.appending(path: "a.txt"))
+    let info = try #require(repoInfo(cwd: dir.path))
+    #expect(pendingTouched([dir.path + "/a.txt"], repo: info) == ["a.txt"])
+}
