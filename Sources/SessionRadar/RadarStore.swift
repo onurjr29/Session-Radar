@@ -137,6 +137,8 @@ private struct HistoryState {
     var lastRunLeftBacklog = false
     /// Haiku'ya gönderilmiş, cevabı beklenen parça
     var job: [Request]?
+    /// iş başlarken arkasında başka parça var mıydı; çağrı sırasında gelen yeni tur 120 sn beklemesine tabi kalsın
+    var jobLeavesBacklog = false
 }
 
 /// Disk okuyan ve durum tutan her şey burada, ana thread dışında çalışır.
@@ -232,9 +234,11 @@ private actor Engine {
                                   lastRunAt: $0.lastRunAt, lastRunLeftBacklog: $0.lastRunLeftBacklog)
             }
         }
-        guard let id = nextGroupingJob(cands, selected: selected, now: now), let h = histories[id],
-              let chunk = chunkRequests(Array(h.requests.dropFirst(h.grouped))).first else { return nil }
+        guard let id = nextGroupingJob(cands, selected: selected, now: now), let h = histories[id] else { return nil }
+        let chunks = chunkRequests(Array(h.requests.dropFirst(h.grouped)))
+        guard let chunk = chunks.first else { return nil }
         histories[id]?.job = chunk
+        histories[id]?.jobLeavesBacklog = chunks.count > 1
         return (id, buildTopicPrompt(existing: h.topics, requests: chunk))
     }
 
@@ -250,7 +254,7 @@ private actor Engine {
            let merged = mergeTopics(existing: h.topics, response: response, newRequests: chunk) {
             h.topics = merged
             h.grouped += chunk.count
-            h.lastRunLeftBacklog = h.grouped < h.requests.count
+            h.lastRunLeftBacklog = h.jobLeavesBacklog
             try? saveTopicFile(TopicFile(sessionId: id, grouped: h.grouped, topics: merged, updatedAt: now),
                                to: paths.topicFile(id))
         }
