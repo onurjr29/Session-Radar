@@ -58,8 +58,8 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(try load(#""version":2,"#)?.grouped == 1)
 }
 
-func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false) -> GroupingCandidate {
-    GroupingCandidate(id: id, ungrouped: n, state: st, alive: alive, lastRunAt: last, lastRunLeftBacklog: backlog)
+func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false, failures: Int = 0) -> GroupingCandidate {
+    GroupingCandidate(id: id, ungrouped: n, state: st, alive: alive, lastRunAt: last, lastRunLeftBacklog: backlog, failures: failures)
 }
 @Test func schedulerRules() {
     let now = Date(timeIntervalSince1970: 1_000)
@@ -70,6 +70,16 @@ func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = 
     #expect(nextGroupingJob([cand("a", 3, last: now.addingTimeInterval(-60))], selected: nil, now: now) == nil)
     #expect(nextGroupingJob([cand("a", 3, last: now.addingTimeInterval(-60), backlog: true)], selected: nil, now: now) == "a")
     #expect(nextGroupingJob([cand("a", 3), cand("b", 3)], selected: "b", now: now) == "b")
+}
+@Test func schedulerBacksOffAfterFailures() {
+    let now = Date(timeIntervalSince1970: 10_000)
+    func job(ago: TimeInterval, failures: Int, backlog: Bool = false) -> String? {
+        nextGroupingJob([cand("a", 3, last: now.addingTimeInterval(-ago), backlog: backlog, failures: failures)], selected: nil, now: now)
+    }
+    #expect(job(ago: 119, failures: 0) == nil && job(ago: 120, failures: 0) == "a")
+    #expect(job(ago: 300, failures: 2) == nil && job(ago: 500, failures: 2) == "a")
+    #expect(job(ago: 3599, failures: 10) == nil && job(ago: 3600, failures: 10) == "a")
+    #expect(job(ago: 60, failures: 1, backlog: true) == nil)
 }
 @Test func labelsFollowSessionState() {
     #expect(topicStateLabel("active", sessionClosed: false) == "Şu anki")

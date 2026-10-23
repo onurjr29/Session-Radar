@@ -135,6 +135,8 @@ private struct HistoryState {
     var grouped = 0
     var lastRunAt: Date?
     var lastRunLeftBacklog = false
+    /// üst üste başarısız gruplama; bekleme 120 sn × 2^n, başarı ya da yeni istek sıfırlar
+    var failures = 0
     /// Haiku'ya gönderilmiş, cevabı beklenen parça
     var job: [Request]?
     /// iş başlarken arkasında başka parça var mıydı; çağrı sırasında gelen yeni tur 120 sn beklemesine tabi kalsın
@@ -217,7 +219,8 @@ private actor Engine {
         let alive = Dictionary(list.map { ($0.id, $0.alive) }, uniquingKeysWith: { a, _ in a })
         groupOrder = sessions.map { ($0.id, $0.state, alive[$0.id] ?? false) }
         let shown = Dictionary(sessions.compactMap { s in
-            histories[s.id].map { (s.id, SessionHistory(requests: $0.requests, topics: $0.topics, grouping: $0.job != nil)) }
+            histories[s.id].map { (s.id, SessionHistory(requests: $0.requests, topics: $0.topics, grouping: $0.job != nil,
+                                       failures: $0.failures)) }
         }, uniquingKeysWith: { a, _ in a })
         let conflicts = findConflicts(sessions)
         let notes = transitions(previous: previous, previousConflictPairs: previousPairs, current: sessions, conflicts: conflicts)
@@ -231,7 +234,7 @@ private actor Engine {
         let cands = groupOrder.compactMap { o in
             histories[o.id].map {
                 GroupingCandidate(id: o.id, ungrouped: $0.requests.count - $0.grouped, state: o.state, alive: o.alive,
-                                  lastRunAt: $0.lastRunAt, lastRunLeftBacklog: $0.lastRunLeftBacklog)
+                                  lastRunAt: $0.lastRunAt, lastRunLeftBacklog: $0.lastRunLeftBacklog, failures: $0.failures)
             }
         }
         guard let id = nextGroupingJob(cands, selected: selected, now: now), let h = histories[id] else { return nil }
@@ -242,7 +245,7 @@ private actor Engine {
         return (id, buildTopicPrompt(existing: h.topics, requests: chunk))
     }
 
-    /// Haiku cevabını işler; geçersizse konular aynen kalır, yeniden deneme 120 sn beklemesine takılır.
+    /// Haiku cevabını işler; geçersizse ya da diske yazılamazsa konular aynen kalır, bekleme iki katına çıkar.
     func finishJob(sessionId id: String, output: String?) {
         // session listeden düştüyse ya da transcript küçüldüyse cevap artık geçersiz
         guard var h = histories[id], let chunk = h.job else { return }
@@ -250,13 +253,17 @@ private actor Engine {
         h.job = nil
         h.lastRunAt = now
         h.lastRunLeftBacklog = false
+        // bellek diskteki durumun önüne geçmesin: yalnızca kayıt başarılıysa ilerler
         if let output, let response = parseTopicResponse(output),
-           let merged = mergeTopics(existing: h.topics, response: response, newRequests: chunk) {
+           let merged = mergeTopics(existing: h.topics, response: response, newRequests: chunk),
+           (try? saveTopicFile(TopicFile(sessionId: id, grouped: h.grouped + chunk.count, topics: merged, updatedAt: now),
+                               to: paths.topicFile(id))) != nil {
             h.topics = merged
             h.grouped += chunk.count
             h.lastRunLeftBacklog = h.jobLeavesBacklog
-            try? saveTopicFile(TopicFile(sessionId: id, grouped: h.grouped, topics: merged, updatedAt: now),
-                               to: paths.topicFile(id))
+            h.failures = 0
+        } else {
+            h.failures += 1
         }
         histories[id] = h
     }
@@ -309,6 +316,7 @@ private actor Engine {
             }
             if let reply = r.trailingReply, !h.requests.isEmpty { h.requests[h.requests.count - 1].reply = reply }
             h.requests += r.requests
+            if !r.requests.isEmpty { h.failures = 0 }
             h.cursor = r.cursor; h.path = t.path; h.mtime = t.mtime
         }
         histories[sid] = h

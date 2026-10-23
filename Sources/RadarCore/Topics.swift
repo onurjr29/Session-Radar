@@ -28,8 +28,10 @@ public struct SessionHistory: Equatable, Sendable {
     public var requests: [Request]
     public var topics: [Topic]
     public var grouping: Bool
-    public init(requests: [Request], topics: [Topic], grouping: Bool) {
-        self.requests = requests; self.topics = topics; self.grouping = grouping
+    /// üst üste başarısız gruplama sayısı; 3 ve üstünde pencerede uyarı çıkar
+    public var failures: Int
+    public init(requests: [Request], topics: [Topic], grouping: Bool, failures: Int = 0) {
+        self.requests = requests; self.topics = topics; self.grouping = grouping; self.failures = failures
     }
 }
 
@@ -147,18 +149,22 @@ public func saveTopicFile(_ file: TopicFile, to url: URL) throws {
 public struct GroupingCandidate: Equatable, Sendable {
     public var id: String; public var ungrouped: Int; public var state: SessionState; public var alive: Bool
     public var lastRunAt: Date?; public var lastRunLeftBacklog: Bool
-    public init(id: String, ungrouped: Int, state: SessionState, alive: Bool, lastRunAt: Date?, lastRunLeftBacklog: Bool) {
+    /// üst üste başarısız gruplama sayısı
+    public var failures: Int
+    public init(id: String, ungrouped: Int, state: SessionState, alive: Bool, lastRunAt: Date?, lastRunLeftBacklog: Bool, failures: Int = 0) {
         self.id = id; self.ungrouped = ungrouped; self.state = state; self.alive = alive
-        self.lastRunAt = lastRunAt; self.lastRunLeftBacklog = lastRunLeftBacklog
+        self.lastRunAt = lastRunAt; self.lastRunLeftBacklog = lastRunLeftBacklog; self.failures = failures
     }
 }
 
 /// Sıradaki gruplama işi: seçili session uygunsa o, yoksa uygun ilk aday (adaylar görüntü sırasıyla gelir).
+/// Başarısızlıkta bekleme her seferinde iki katına çıkar (en fazla 1 saat).
 public func nextGroupingJob(_ candidates: [GroupingCandidate], selected: String?, now: Date, gap: TimeInterval = 120) -> String? {
-    let eligible = candidates.filter {
-        $0.ungrouped > 0
-            && ($0.id == selected || ($0.alive && $0.state != .working))
-            && ($0.lastRunLeftBacklog || ($0.lastRunAt.map { now.timeIntervalSince($0) >= gap } ?? true))
+    let eligible = candidates.filter { c in
+        let wait = min(gap * pow(2, Double(c.failures)), 3600)
+        return c.ungrouped > 0
+            && (c.id == selected || (c.alive && c.state != .working))
+            && ((c.failures == 0 && c.lastRunLeftBacklog) || (c.lastRunAt.map { now.timeIntervalSince($0) >= wait } ?? true))
     }
     return eligible.first { $0.id == selected }?.id ?? eligible.first?.id
 }

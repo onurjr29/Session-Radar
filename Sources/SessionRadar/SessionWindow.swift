@@ -102,6 +102,10 @@ private struct SessionDetailPane: View {
                     Text("Gruplanıyor…").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            if (history?.failures ?? 0) >= 3 {
+                Text("Konu gruplama tekrar tekrar başarısız oldu, daha seyrek deneniyor.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
             if let topics = history?.topics, !topics.isEmpty {
                 let requests = history?.requests ?? []
                 ForEach(Array(topics.enumerated()), id: \.element.id) { i, t in
