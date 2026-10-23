@@ -133,3 +133,17 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     apply(ev("Notification", nt: "idle_prompt"), to: &a)
     #expect(a.state == .turnDone && a.action == nil)
 }
+@Test func waitingSinceSetOnceAndCleared() {
+    var a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "ls", ts: 10), ev("Notification", nt: "permission_prompt", msg: "izin", ts: 11),
+                          ev("Notification", nt: "idle_prompt", ts: 70)])
+    #expect(a.waitingSince == 11)
+    apply(ev("PostToolUse", tool: "Bash", target: "ls", ts: 80), to: &a)
+    #expect(a.waitingSince == nil)
+}
+@Test func permissionPromptNoteShowsPendingTool() {
+    let a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "npm run migrate"),
+                          ev("Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash")])
+    #expect(a.note == "Bash · npm run migrate")
+    let b = reduceEvents([ev("Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash")])
+    #expect(b.note == "Claude needs your permission to use Bash")
+}

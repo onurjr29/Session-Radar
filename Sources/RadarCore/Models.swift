@@ -71,6 +71,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var updatedAt: Date
     public var currentTopic: String? = nil
     public var openTopics: Int = 0
+    /// yalnızca state == .waiting iken dolu
+    public var waitingSince: Date? = nil
     /// süreç çalışıyor; beklenmedik kapanan session "sorun" durumunda ama canlı değil
     public var alive = true
 }

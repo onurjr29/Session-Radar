@@ -102,7 +102,9 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         pendingFiles: i.repo.map { pendingTouched(i.activity?.touched ?? [], repo: $0) } ?? [],
         transcriptPath: i.activity?.transcriptPath,
         updatedAt: updatedAt,
-        currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open, alive: i.alive)
+        currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open,
+        waitingSince: state == .waiting ? i.activity?.waitingSince.map { Date(timeIntervalSince1970: $0) } : nil,
+        alive: i.alive)
 }
 
 public func shouldKeep(_ s: SessionSnapshot, alive: Bool, now: Date) -> Bool {

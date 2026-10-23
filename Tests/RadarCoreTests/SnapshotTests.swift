@@ -167,3 +167,13 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
                                         lastSeen: Date(timeIntervalSince1970: 0)))
     #expect(s.repoRoot == "/r" && s.repoKey == "k")
 }
+@Test func snapshotCarriesWaitingSince() {
+    func snapOf(_ a: Activity, registry: RegistryEntry? = nil) -> SessionSnapshot {
+        buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: registry, alive: true, seenAlive: true, activity: a,
+                                    status: nil, transcript: nil, repo: nil, lastSeen: Date(timeIntervalSince1970: 0)))
+    }
+    var a = act(.waiting, at: 900); a.waitingSince = 850
+    #expect(snapOf(a).waitingSince == Date(timeIntervalSince1970: 850))
+    // kayıt dosyası idle durumuna geçtiyse bekleme bitmiştir
+    #expect(snapOf(a, registry: reg("s", pid: 7, status: "idle", at: 950_000)).waitingSince == nil)
+}

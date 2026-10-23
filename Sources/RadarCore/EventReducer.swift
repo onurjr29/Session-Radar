@@ -12,6 +12,8 @@ public struct Activity: Equatable, Sendable {
     public var transcriptPath: String?
     /// son olayı yazan Claude süreci
     public var pid: Int32?
+    /// bekleme durumuna girilen an (epoch sn); beklemedeyken kesintisiz korunur
+    public var waitingSince: Double?
     public init() {}
 }
 
@@ -59,7 +61,8 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
     case "Notification":
         switch e.notificationType {
         case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog":
-            a.state = .waiting; a.note = e.message
+            // PreToolUse izin penceresinden önce gelir; action bekleyen tool'dur
+            a.state = .waiting; a.note = e.notificationType == "permission_prompt" ? (a.action ?? e.message) : e.message
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
         case "quota_auto_resume_fired": a.state = .working
@@ -83,6 +86,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         a.ended = true; a.state = .closed; a.action = nil
     default: break
     }
+    a.waitingSince = a.state == .waiting ? (a.waitingSince ?? e.ts) : nil
 }
 
 public func reduceEvents(_ events: [HookEvent]) -> Activity {
