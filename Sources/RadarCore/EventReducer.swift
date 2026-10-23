@@ -82,13 +82,21 @@ public func reduceEvents(_ events: [HookEvent]) -> Activity {
     return a
 }
 
-public func resolveState(activity: Activity?, agent: AgentEntry?, alive: Bool, status: SessionStatus?) -> (state: SessionState, note: String?) {
+public func resolveState(activity: Activity?, agent: AgentEntry?, registry: RegistryEntry?, alive: Bool, seenAlive: Bool,
+                         status: SessionStatus?) -> (state: SessionState, note: String?) {
     if activity?.ended == true { return (.closed, nil) }
     if !alive {
-        if let a = activity, a.state == .working || a.state == .waiting {
+        // yalnızca bu çalışmada canlı görülmüş session; yeni ya da /clear ile açılan yanlış alarm vermesin
+        if seenAlive, let a = activity, a.state == .working || a.state == .waiting {
             return (.problem, "Session beklenmedik şekilde kapandı")
         }
         return (.closed, nil)
+    }
+    var activity = activity
+    // Esc ile kesilen turda Stop gelmez; kayıt dosyası son olaydan sonra idle'a geçtiyse tur bitmiştir
+    if let a = activity, a.state == .working, a.lastEvent != "Stop", registry?.status == "idle",
+       let idleAt = registry?.statusUpdatedAt, let last = a.lastEventAt, idleAt / 1000 > last {
+        activity?.state = .turnDone
     }
     let problems = status?.problems.flatMap { p in p.contains(where: { !$0.isEmpty }) ? p.joined(separator: "; ") : nil }
     // "seni bekliyor" sorunların altında kaybolmasın

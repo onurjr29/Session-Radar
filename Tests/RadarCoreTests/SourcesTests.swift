@@ -46,3 +46,15 @@ let fixture = """
     """))
     #expect(t.lastAction == "Bash · npm test")
 }
+@Test func registrySkipsMalformedFiles() throws {
+    let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    func put(_ name: String, _ s: String) throws { try s.write(to: dir.appending(path: name), atomically: true, encoding: .utf8) }
+    try put("13381.json", #"{"pid":13381,"sessionId":"d851","cwd":"/Users/o","startedAt":1,"kind":"interactive","name":"onur-4a","status":"idle","updatedAt":2,"statusUpdatedAt":1792721451546,"peerFeatures":["x"]}"#)
+    try put("1.json", "{bozuk")
+    try put("2.json", #"{"sessionId":"pid-yok"}"#)
+    try put("13381.abc.key", "gizli")
+    #expect(loadRegistry(dir: dir) == [RegistryEntry(pid: 13381, sessionId: "d851", cwd: "/Users/o", name: "onur-4a",
+                                                     kind: "interactive", status: "idle", statusUpdatedAt: 1792721451546)])
+    #expect(loadRegistry(dir: dir.appending(path: "yok")).isEmpty)
+}

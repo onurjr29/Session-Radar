@@ -104,8 +104,12 @@ private actor Engine {
     private let paths: RadarPaths
     private let reader: EventLogReader
     private let projectsDir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude/projects")
+    private let registryDir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude/sessions")
     private var activities: [String: Activity] = [:]
     private var agents: [AgentEntry] = []
+    private var registry: [RegistryEntry] = []
+    /// bu çalışmada pid ile canlı görülen session'lar; yalnızca bunlar "beklenmedik şekilde kapandı" olabilir
+    private var seenAlive: Set<String> = []
     private var repos: [String: RepoInfo] = [:]
     private var statuses: [String: (mtime: Date?, value: SessionStatus?)] = [:]
     private var transcripts: [String: (path: String, mtime: Date?, value: TranscriptInfo)] = [:]
@@ -146,14 +150,16 @@ private actor Engine {
 
     func tick(now: Date) -> (sessions: [SessionSnapshot], conflicts: [Conflict], notifications: [RadarNotification]) {
         ingest()
+        registry = loadRegistry(dir: registryDir)
         let list = candidates(now: now)
+        seenAlive.formUnion(list.filter(\.seenAlive).map(\.id))
         var kept: [SessionSnapshot] = []
         for c in list {
-            let alive = isAlive(c.agent)
             let snap = buildSnapshot(SessionInputs(
-                sessionId: c.id, agent: c.agent, alive: alive, activity: c.activity, status: status(c.id),
+                sessionId: c.id, agent: c.agent, registry: c.registry, alive: c.alive, seenAlive: c.seenAlive,
+                activity: c.activity, status: status(c.id),
                 transcript: transcript(c.id, hint: c.activity?.transcriptPath), repo: repos[c.cwd], lastSeen: now))
-            if shouldKeep(snap, alive: alive, now: now) { kept.append(snap) }
+            if shouldKeep(snap, alive: c.alive, now: now) { kept.append(snap) }
         }
         let ids = Set(list.map(\.id))
         statuses = statuses.filter { ids.contains($0.key) }
@@ -175,17 +181,8 @@ private actor Engine {
         }
     }
 
-    /// agents listesi + son 24 saatte olayı olan session'lar; veri kökündekiler hariç.
-    private func candidates(now: Date) -> [(id: String, agent: AgentEntry?, activity: Activity?, cwd: String)] {
-        let byId = Dictionary(agents.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
-        let dayAgo = now.timeIntervalSince1970 - 86400
-        let recent = activities.filter { ($0.value.lastEventAt ?? 0) >= dayAgo }.keys
-        return Set(byId.keys).union(recent).compactMap { id in
-            let agent = byId[id], activity = activities[id]
-            let cwd = agent?.cwd ?? activity?.cwd ?? ""
-            if !cwd.isEmpty && paths.isInternal(cwd: cwd) { return nil }
-            return (id, agent, activity, cwd)
-        }
+    private func candidates(now: Date) -> [Candidate] {
+        sessionCandidates(agents: agents, registry: registry, activities: activities, seenAlive: seenAlive, paths: paths, now: now)
     }
 
     private func status(_ sid: String) -> SessionStatus? {

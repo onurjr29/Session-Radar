@@ -3,16 +3,19 @@ import Foundation
 public struct SessionInputs: Sendable {
     public var sessionId: String
     public var agent: AgentEntry?
+    public var registry: RegistryEntry?
     public var alive: Bool
+    public var seenAlive: Bool
     public var activity: Activity?
     public var status: SessionStatus?
     public var transcript: TranscriptInfo?
     public var repo: RepoInfo?
     public var lastSeen: Date
 
-    public init(sessionId: String, agent: AgentEntry?, alive: Bool, activity: Activity?, status: SessionStatus?,
-                transcript: TranscriptInfo?, repo: RepoInfo?, lastSeen: Date) {
-        self.sessionId = sessionId; self.agent = agent; self.alive = alive; self.activity = activity
+    public init(sessionId: String, agent: AgentEntry?, registry: RegistryEntry?, alive: Bool, seenAlive: Bool,
+                activity: Activity?, status: SessionStatus?, transcript: TranscriptInfo?, repo: RepoInfo?, lastSeen: Date) {
+        self.sessionId = sessionId; self.agent = agent; self.registry = registry; self.alive = alive
+        self.seenAlive = seenAlive; self.activity = activity
         self.status = status; self.transcript = transcript; self.repo = repo; self.lastSeen = lastSeen
     }
 }
@@ -20,6 +23,38 @@ public struct SessionInputs: Sendable {
 public func isAlive(_ agent: AgentEntry?, probe: (Int32) -> Bool = { kill($0, 0) == 0 }) -> Bool {
     guard let pid = agent?.pid else { return false }
     return probe(pid)
+}
+
+public struct Candidate: Equatable, Sendable {
+    public var id: String
+    public var agent: AgentEntry?
+    public var registry: RegistryEntry?
+    public var activity: Activity?
+    public var cwd: String
+    public var alive: Bool
+    public var seenAlive: Bool
+}
+
+/// agents listesi + son 24 saatte olayı olan session'lar; veri kökündekiler hariç.
+/// Canlı: kayıt dosyasındaki ya da agents'taki pid çalışıyor, veya son 15 sn içinde olay gelmiş.
+public func sessionCandidates(agents: [AgentEntry], registry: [RegistryEntry], activities: [String: Activity],
+                              seenAlive: Set<String>, paths: RadarPaths, now: Date,
+                              probe: (Int32) -> Bool = { kill($0, 0) == 0 }) -> [Candidate] {
+    // aynı session'ın eski süreçten kalmış kaydı olabilir; yalnızca pid'i çalışanlar
+    let live = Dictionary(registry.filter { probe($0.pid) }.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
+    let byId = Dictionary(agents.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
+    let t = now.timeIntervalSince1970
+    let recent = activities.filter { ($0.value.lastEventAt ?? 0) >= t - 86400 }.keys
+    return Set(byId.keys).union(recent).compactMap { id in
+        let agent = byId[id], reg = live[id], activity = activities[id]
+        let cwd = agent?.cwd ?? reg?.cwd ?? activity?.cwd ?? ""
+        if !cwd.isEmpty && paths.isInternal(cwd: cwd) { return nil }
+        let pidAlive = reg != nil || isAlive(agent, probe: probe)
+        // kayıt dosyası ilk olaydan biraz sonra yazılabilir
+        let fresh = (activity?.lastEventAt ?? 0) >= t - 15
+        return Candidate(id: id, agent: agent, registry: reg, activity: activity, cwd: cwd,
+                         alive: pidAlive || fresh, seenAlive: pidAlive || seenAlive.contains(id))
+    }
 }
 
 private func shortTask(_ prompt: String?) -> String? {
@@ -30,7 +65,8 @@ private func shortTask(_ prompt: String?) -> String? {
 public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
     let cwd = i.agent?.cwd ?? i.activity?.cwd ?? ""
     let name = i.agent?.name ?? i.transcript?.aiTitle ?? URL(fileURLWithPath: cwd).lastPathComponent
-    let (state, note) = resolveState(activity: i.activity, agent: i.agent, alive: i.alive, status: i.status)
+    let (state, note) = resolveState(activity: i.activity, agent: i.agent, registry: i.registry, alive: i.alive,
+                                     seenAlive: i.seenAlive, status: i.status)
     let todo = i.status?.todo ?? []
     let updatedAt = i.activity?.lastEventAt.map { Date(timeIntervalSince1970: $0) }
         ?? i.agent?.startedAt.map { Date(timeIntervalSince1970: $0 / 1000) }

@@ -4,6 +4,24 @@ public func parseAgents(_ data: Data) -> [AgentEntry] {
     (try? JSONDecoder().decode([AgentEntry].self, from: data)) ?? []
 }
 
+/// `~/.claude/sessions/<pid>.json`: Claude Code'un canlı session kaydı; diğer anahtarlar yok sayılır.
+public struct RegistryEntry: Codable, Equatable, Sendable {
+    public var pid: Int32
+    public var sessionId: String
+    public var cwd: String?
+    public var name: String?
+    public var kind: String?
+    public var status: String?
+    public var statusUpdatedAt: Double?
+}
+
+public func loadRegistry(dir: URL) -> [RegistryEntry] {
+    let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+    let dec = JSONDecoder()
+    return files.filter { $0.pathExtension == "json" }
+        .compactMap { (try? Data(contentsOf: $0)).flatMap { try? dec.decode(RegistryEntry.self, from: $0) } }
+}
+
 public func loadStatus(_ url: URL) -> SessionStatus? {
     let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
     guard size <= 64 * 1024, let data = try? Data(contentsOf: url) else { return nil }

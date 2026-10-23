@@ -27,20 +27,20 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
 @Test func resolveRules() {
     var working = Activity(); working.state = .working
     var ended = Activity(); ended.ended = true
-    #expect(resolveState(activity: ended, agent: nil, alive: true, status: nil).state == .closed)
-    #expect(resolveState(activity: working, agent: nil, alive: false, status: nil) == (.problem, "Session beklenmedik şekilde kapandı"))
-    #expect(resolveState(activity: Activity(), agent: nil, alive: false, status: nil).state == .closed)
-    #expect(resolveState(activity: working, agent: nil, alive: true, status: SessionStatus(problems: ["build kırık"])) == (.problem, "build kırık"))
+    #expect(resolveState(activity: ended, agent: nil, registry: nil, alive: true, seenAlive: true, status: nil).state == .closed)
+    #expect(resolveState(activity: working, agent: nil, registry: nil, alive: false, seenAlive: true, status: nil) == (.problem, "Session beklenmedik şekilde kapandı"))
+    #expect(resolveState(activity: Activity(), agent: nil, registry: nil, alive: false, seenAlive: true, status: nil).state == .closed)
+    #expect(resolveState(activity: working, agent: nil, registry: nil, alive: true, seenAlive: true, status: SessionStatus(problems: ["build kırık"])) == (.problem, "build kırık"))
 }
 @Test func resolveFallsBackToAgentWithoutEvents() {
     let bg = AgentEntry(id: "x", pid: 1, sessionId: "s", name: nil, cwd: "/r", kind: "background", startedAt: nil, status: nil, state: "blocked")
     let it = AgentEntry(id: nil, pid: 2, sessionId: "s", name: nil, cwd: "/r", kind: "interactive", startedAt: nil, status: "busy", state: nil)
-    #expect(resolveState(activity: nil, agent: bg, alive: true, status: nil).state == .waiting)
-    #expect(resolveState(activity: nil, agent: it, alive: true, status: nil).state == .working)
+    #expect(resolveState(activity: nil, agent: bg, registry: nil, alive: true, seenAlive: true, status: nil).state == .waiting)
+    #expect(resolveState(activity: nil, agent: it, registry: nil, alive: true, seenAlive: true, status: nil).state == .working)
 }
 @Test func resolveStoppedBackgroundIsClosed() {
     let stopped = AgentEntry(id: "x", pid: nil, sessionId: "s", name: nil, cwd: "/r", kind: "background", startedAt: nil, status: nil, state: "blocked")
-    #expect(resolveState(activity: nil, agent: stopped, alive: false, status: nil).state == .closed)
+    #expect(resolveState(activity: nil, agent: stopped, registry: nil, alive: false, seenAlive: true, status: nil).state == .closed)
 }
 @Test func readerWaitsForCompleteLine() throws {
     let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
@@ -58,7 +58,7 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     let a = reduceEvents([ev("SessionStart", src: "startup"), ev("SessionEnd"), ev("SessionStart", src: "resume"),
                           ev("UserPromptSubmit"), ev("Notification", nt: "permission_prompt", msg: "izin")])
     #expect(!a.ended)
-    #expect(resolveState(activity: a, agent: nil, alive: true, status: nil) == (.waiting, "izin"))
+    #expect(resolveState(activity: a, agent: nil, registry: nil, alive: true, seenAlive: true, status: nil) == (.waiting, "izin"))
 }
 @Test func compactionKeepsState() {
     var waiting = reduceEvents([ev("UserPromptSubmit"), ev("Notification", nt: "permission_prompt", msg: "izin")])
@@ -75,11 +75,11 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
 @Test func waitingWinsOverStatusProblems() {
     var waiting = Activity(); waiting.state = .waiting; waiting.note = "Onay?"
     let problems = SessionStatus(problems: ["build kırık"])
-    #expect(resolveState(activity: waiting, agent: nil, alive: true, status: problems) == (.waiting, "Onay?"))
+    #expect(resolveState(activity: waiting, agent: nil, registry: nil, alive: true, seenAlive: true, status: problems) == (.waiting, "Onay?"))
     waiting.note = nil
-    #expect(resolveState(activity: waiting, agent: nil, alive: true, status: problems) == (.waiting, "build kırık"))
+    #expect(resolveState(activity: waiting, agent: nil, registry: nil, alive: true, seenAlive: true, status: problems) == (.waiting, "build kırık"))
     var done = Activity(); done.state = .turnDone
-    #expect(resolveState(activity: done, agent: nil, alive: true, status: problems) == (.problem, "build kırık"))
+    #expect(resolveState(activity: done, agent: nil, registry: nil, alive: true, seenAlive: true, status: problems) == (.problem, "build kırık"))
 }
 @Test func agentViewNotificationsAreIgnored() {
     let a = reduceEvents([ev("UserPromptSubmit"), ev("Notification", nt: "agent_needs_input", msg: "başka session"),
