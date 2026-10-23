@@ -60,6 +60,46 @@ Tests/RadarCoreTests/HistoryTests.swift, TopicsTests.swift — yeni
 
 ---
 
+### Task 0: Esc ile kesilen session'ın "Çalışıyor"da kalması (MVP final review'dan kalan I1)
+
+**Files:**
+- Modify: `Sources/RadarCore/EventReducer.swift` (`apply`, Notification dalı)
+- Test: `Tests/RadarCoreTests/EventReducerTests.swift`
+
+**Arka plan:**
+- Kullanıcı Esc ile turu keserse `Stop` olayı gelmez.
+- Mevcut kural, kayıt dosyasında "idle" durumu son olaydan yeniyse durumu "Tur bitti" yapıyor. Ama yaklaşık 60 saniye sonra Claude Code `Notification` / `idle_prompt` gönderiyor. Bu olay `lastEventAt` değerini ilerlettiği için durum yeniden "Çalışıyor"a dönüyor. Bu davranış gerçek günlükte görüldü.
+
+**Kural:**
+- `apply` içinde `Notification` ve `notificationType == "idle_prompt"` geldiğinde: activity `.working` durumundaysa ve bir önceki olay (`lastEvent`, bu olay işlenmeden önceki değer) `Stop` değilse `state = .turnDone` ve `action = nil` olur.
+- `lastEvent` alanı `Stop` ise session arka plan işi bekliyordur ve bu kural uygulanmaz.
+- `.waiting` durumuna dokunulmaz.
+
+- [ ] **Step 1: Write the failing tests**
+
+```swift
+@Test func idlePromptEndsInterruptedTurn() {
+    var a = reduceEvents([ev("UserPromptSubmit"), ev("PreToolUse", tool: "Bash", target: "npm test")])
+    apply(ev("Notification", nt: "idle_prompt", msg: "Claude is waiting for your input"), to: &a)
+    #expect(a.state == .turnDone && a.action == nil)
+}
+@Test func idlePromptKeepsBackgroundWaitAndQuestions() {
+    var bg = reduceEvents([ev("UserPromptSubmit"), ev("Stop", bg: 1)])
+    apply(ev("Notification", nt: "idle_prompt"), to: &bg)
+    #expect(bg.state == .working)
+    var q = reduceEvents([ev("UserPromptSubmit"), ev("Stop", msg: "Devam edeyim mi?", q: true)])
+    apply(ev("Notification", nt: "idle_prompt"), to: &q)
+    #expect(q.state == .waiting)
+}
+```
+
+- [ ] **Step 2: Run** — `swift test --filter EventReducerTests` → Expected: `idlePromptEndsInterruptedTurn` FAIL.
+- [ ] **Step 3: Implement the rule in `apply`.**
+- [ ] **Step 4: Run** — `swift test` → Expected: tüm testler PASS.
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "fix: Esc ile kesilen tur idle_prompt ile bitmiş sayılır"`
+
+---
+
 ### Task 1: Transcript'ten istekleri artımlı okuma
 
 **Files:**
