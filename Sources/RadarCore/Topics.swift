@@ -140,3 +140,34 @@ public func saveTopicFile(_ file: TopicFile, to url: URL) throws {
         throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
     }
 }
+
+public struct GroupingCandidate: Equatable, Sendable {
+    public var id: String; public var ungrouped: Int; public var state: SessionState; public var alive: Bool
+    public var lastRunAt: Date?; public var lastRunLeftBacklog: Bool
+    public init(id: String, ungrouped: Int, state: SessionState, alive: Bool, lastRunAt: Date?, lastRunLeftBacklog: Bool) {
+        self.id = id; self.ungrouped = ungrouped; self.state = state; self.alive = alive
+        self.lastRunAt = lastRunAt; self.lastRunLeftBacklog = lastRunLeftBacklog
+    }
+}
+
+/// Sıradaki gruplama işi: seçili session uygunsa o, yoksa uygun ilk aday (adaylar görüntü sırasıyla gelir).
+public func nextGroupingJob(_ candidates: [GroupingCandidate], selected: String?, now: Date, gap: TimeInterval = 120) -> String? {
+    let eligible = candidates.filter {
+        $0.ungrouped > 0
+            && ($0.id == selected || ($0.alive && $0.state != .working))
+            && ($0.lastRunLeftBacklog || ($0.lastRunAt.map { now.timeIntervalSince($0) >= gap } ?? true))
+    }
+    return eligible.first { $0.id == selected }?.id ?? eligible.first?.id
+}
+
+public func topicStateLabel(_ state: String, sessionClosed: Bool) -> String {
+    switch state {
+    case "active": return sessionClosed ? "Son konu" : "Şu anki"
+    case "done": return "Kapandı"
+    default: return "Açık kaldı"
+    }
+}
+
+public func currentTopicSummary(_ topics: [Topic]) -> (current: String?, open: Int) {
+    (topics.last { $0.state == "active" }?.title, topics.filter { $0.state == "open" }.count)
+}

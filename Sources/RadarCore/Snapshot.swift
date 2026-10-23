@@ -11,12 +11,15 @@ public struct SessionInputs: Sendable {
     public var transcript: TranscriptInfo?
     public var repo: RepoInfo?
     public var lastSeen: Date
+    public var topics: [Topic]
 
     public init(sessionId: String, agent: AgentEntry?, registry: RegistryEntry?, alive: Bool, seenAlive: Bool,
-                activity: Activity?, status: SessionStatus?, transcript: TranscriptInfo?, repo: RepoInfo?, lastSeen: Date) {
+                activity: Activity?, status: SessionStatus?, transcript: TranscriptInfo?, repo: RepoInfo?, lastSeen: Date,
+                topics: [Topic] = []) {
         self.sessionId = sessionId; self.agent = agent; self.registry = registry; self.alive = alive
         self.seenAlive = seenAlive; self.activity = activity
         self.status = status; self.transcript = transcript; self.repo = repo; self.lastSeen = lastSeen
+        self.topics = topics
     }
 }
 
@@ -71,6 +74,7 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
     let updatedAt = i.activity?.lastEventAt.map { Date(timeIntervalSince1970: $0) }
         ?? i.agent?.startedAt.map { Date(timeIntervalSince1970: $0 / 1000) }
         ?? i.lastSeen
+    let topic = currentTopicSummary(i.topics)
     return SessionSnapshot(
         id: i.sessionId, name: name, cwd: cwd,
         repoName: i.repo?.name, repoKey: i.repo?.key, repoRoot: i.repo?.toplevel, branch: i.repo?.branch,
@@ -81,16 +85,13 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         status: i.status,
         pendingFiles: i.repo.map { pendingTouched(i.activity?.touched ?? [], repo: $0) } ?? [],
         transcriptPath: i.activity?.transcriptPath,
-        updatedAt: updatedAt)
+        updatedAt: updatedAt,
+        currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open)
 }
 
 public func shouldKeep(_ s: SessionSnapshot, alive: Bool, now: Date) -> Bool {
     // ponytail: 24 saatten eski kapanmış session'ların push'lanmamış dosyaları çakışma kontrolüne girmez; gerekirse kişi bazlı kalıcı kayıt
     alive || now.timeIntervalSince(s.updatedAt) < 24 * 3600
-}
-
-public func topicSummary(_ topics: [TopicItem]?) -> (current: String?, open: Int) {
-    (topics?.last { $0.state == "active" }?.title, topics?.filter { $0.state == "open" }.count ?? 0)
 }
 
 public func sortForDisplay(_ s: [SessionSnapshot]) -> [SessionSnapshot] {

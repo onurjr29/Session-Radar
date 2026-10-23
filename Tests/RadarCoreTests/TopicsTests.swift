@@ -46,3 +46,39 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(loadTopicFile(url) == f)
     #expect((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int) == 0o600)
 }
+
+func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false) -> GroupingCandidate {
+    GroupingCandidate(id: id, ungrouped: n, state: st, alive: alive, lastRunAt: last, lastRunLeftBacklog: backlog)
+}
+@Test func schedulerRules() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    #expect(nextGroupingJob([cand("a", 0), cand("b", 3)], selected: nil, now: now) == "b")
+    #expect(nextGroupingJob([cand("a", 3, .working)], selected: nil, now: now) == nil)
+    #expect(nextGroupingJob([cand("a", 3, .working)], selected: "a", now: now) == "a")
+    #expect(nextGroupingJob([cand("a", 3, .closed, alive: false)], selected: nil, now: now) == nil)
+    #expect(nextGroupingJob([cand("a", 3, last: now.addingTimeInterval(-60))], selected: nil, now: now) == nil)
+    #expect(nextGroupingJob([cand("a", 3, last: now.addingTimeInterval(-60), backlog: true)], selected: nil, now: now) == "a")
+    #expect(nextGroupingJob([cand("a", 3), cand("b", 3)], selected: "b", now: now) == "b")
+}
+@Test func labelsFollowSessionState() {
+    #expect(topicStateLabel("active", sessionClosed: false) == "Şu anki")
+    #expect(topicStateLabel("active", sessionClosed: true) == "Son konu")
+    #expect(topicStateLabel("open", sessionClosed: false) == "Açık kaldı")
+    #expect(topicStateLabel("done", sessionClosed: false) == "Kapandı")
+    #expect(topicStateLabel("x", sessionClosed: false) == "Açık kaldı")
+}
+@Test func snapshotUsesTopicsThenLastPrompt() {
+    let topics = [Topic(id: 1, title: "Eski", state: "open", summary: "", requests: [1]), Topic(id: 2, title: "Bildirimler", state: "active", summary: "", requests: [2])]
+    func inputs(_ t: [Topic]) -> SessionInputs {
+        SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: true, seenAlive: true, activity: nil, status: nil,
+                      transcript: TranscriptInfo(aiTitle: nil, lastPrompt: "Son istek", lastAction: nil, dialogue: []),
+                      repo: nil, lastSeen: Date(), topics: t)
+    }
+    let a = buildSnapshot(inputs(topics))
+    #expect(a.currentTopic == "Bildirimler" && a.openTopics == 1)
+    let b = buildSnapshot(inputs([]))
+    #expect(b.currentTopic == "Son istek" && b.openTopics == 0)
+}
+@Test func startContextHasNoTopics() {
+    #expect(!sessionStartContext(statusFile: URL(fileURLWithPath: "/x/s.json")).contains("topics"))
+}

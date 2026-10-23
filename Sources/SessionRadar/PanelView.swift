@@ -82,7 +82,6 @@ private struct SessionRow: View {
 
     var body: some View {
         let s = session
-        let topic = topicSummary(s.status?.topics)
         VStack(alignment: .leading, spacing: 3) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -103,8 +102,8 @@ private struct SessionRow: View {
                 if let task = s.task { Text(task).font(.callout).lineLimit(1) }
                 // Bash eylemi uzun ya da çok satırlı olabilir
                 if let action = s.action { Text(action).font(.caption.monospaced()).lineLimit(1) }
-                if let current = topic.current {
-                    Text("Konu: " + current + (topic.open > 0 ? " · \(topic.open) açık konu" : ""))
+                if let current = s.currentTopic {
+                    Text("Konu: " + current + (s.openTopics > 0 ? " · \(s.openTopics) açık konu" : ""))
                         .font(.caption).lineLimit(1)
                 }
             }
@@ -138,57 +137,10 @@ private struct SessionDetail: View {
             if !session.pendingFiles.isEmpty {
                 Text("Bekleyen dosyalar: " + session.pendingFiles.sorted().joined(separator: ", "))
             }
-            if let topics = st?.topics, !topics.isEmpty {
-                TopicFlow(topics: topics).padding(.top, 4)
-            }
             AskBox(sessionId: session.id, store: store).padding(.top, 4)
         }
         .font(.caption)
         .padding(.top, 4)
-    }
-}
-
-private struct TopicFlow: View {
-    let topics: [TopicItem]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Konu akışı").font(.caption.bold()).padding(.bottom, 4)
-            ForEach(Array(topics.enumerated()), id: \.offset) { i, t in
-                let last = i == topics.count - 1
-                HStack(alignment: .top, spacing: 6) {
-                    marker(t.state).frame(width: 10, height: 14)
-                    title(t)
-                }
-                .padding(.bottom, last ? 0 : 6)
-                // konuları birbirine bağlayan ince dikey çizgi
-                .background(alignment: .topLeading) {
-                    if !last {
-                        Rectangle().fill(.tertiary).frame(width: 1).padding(.top, 12).padding(.leading, 4.5)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private func marker(_ state: String) -> some View {
-        switch state {
-        case "active": Circle().fill(Color.accentColor).frame(width: 8, height: 8)
-        case "done": Text("✓").font(.caption2).foregroundStyle(.secondary)
-        default: Circle().strokeBorder(.secondary, lineWidth: 1).frame(width: 8, height: 8)
-        }
-    }
-
-    @ViewBuilder private func title(_ t: TopicItem) -> some View {
-        switch t.state {
-        case "active": Text(t.title).font(.caption.bold()).foregroundStyle(Color.accentColor)
-        case "done": Text(t.title).font(.caption).foregroundStyle(.secondary)
-        default:
-            HStack(spacing: 4) {
-                Text(t.title).font(.caption)
-                Text("açık").font(.caption2).padding(.horizontal, 4).background(.orange.opacity(0.2), in: Capsule())
-            }
-        }
     }
 }
 

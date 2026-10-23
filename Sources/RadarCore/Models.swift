@@ -20,9 +20,6 @@ public struct HookEvent: Codable, Equatable, Sendable {
 
 public struct TodoItem: Codable, Equatable, Sendable { public var text: String; public var done: Bool }
 
-/// state: "active" | "open" | "done"; bilinmeyen değer "open" gibi gösterilir
-public struct TopicItem: Codable, Equatable, Sendable { public var title: String; public var state: String }
-
 public struct SessionStatus: Codable, Equatable, Sendable {
     public var task: String?
     public var why: String?
@@ -30,12 +27,11 @@ public struct SessionStatus: Codable, Equatable, Sendable {
     public var next: String?
     public var todo: [TodoItem]?
     public var problems: [String]?
-    public var topics: [TopicItem]?
 
     public init(task: String? = nil, why: String? = nil, phase: String? = nil, next: String? = nil,
-                todo: [TodoItem]? = nil, problems: [String]? = nil, topics: [TopicItem]? = nil) {
+                todo: [TodoItem]? = nil, problems: [String]? = nil) {
         self.task = task; self.why = why; self.phase = phase; self.next = next
-        self.todo = todo; self.problems = problems; self.topics = topics
+        self.todo = todo; self.problems = problems
     }
 }
 
@@ -71,6 +67,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var pendingFiles: Set<String>
     public var transcriptPath: String?
     public var updatedAt: Date
+    public var currentTopic: String? = nil
+    public var openTopics: Int = 0
 }
 
 public struct RadarPaths: Sendable {

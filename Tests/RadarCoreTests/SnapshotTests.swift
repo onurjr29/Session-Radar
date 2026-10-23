@@ -36,12 +36,6 @@ func snap(_ id: String, _ st: SessionState, note: String? = nil, task: String? =
         repo: nil, lastSeen: Date(timeIntervalSince1970: 5)))
     #expect(s.name == "Başlık" && s.task == String(repeating: "a", count: 80) + "…" && s.updatedAt.timeIntervalSince1970 == 5)
 }
-@Test func topicSummaryCountsOpen() {
-    let t = [TopicItem(title: "A", state: "done"), TopicItem(title: "B", state: "open"), TopicItem(title: "C", state: "active")]
-    let s = topicSummary(t)
-    #expect(s.current == "C" && s.open == 1)
-    #expect(topicSummary(nil).current == nil && topicSummary(nil).open == 0)
-}
 @Test func badgeAndOrder() {
     let list = [snap("w", .working), snap("c", .closed), snap("q", .waiting), snap("p", .problem)]
     #expect(badgeCount(list) == 2 && sortForDisplay(list).map(\.id) == ["q", "p", "w", "c"])

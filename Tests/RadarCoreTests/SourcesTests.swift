@@ -36,7 +36,7 @@ let fixture = """
 @Test func statusLoadingIsTolerant() throws {
     let s = loadStatus(try tempFile(#"{"task":"Login düzelt","todo":[{"text":"a","done":true}],"topics":[{"title":"Giriş","state":"done"},{"title":"Login","state":"active"}],"extra":1}"#))
     #expect(s?.task == "Login düzelt" && s?.todo?.first?.done == true && s?.why == nil)
-    #expect(s?.topics?.map(\.state) == ["done", "active"])
+    // eski dosyalardaki "topics" anahtarı yok sayılır
     #expect(loadStatus(try tempFile("{bozuk")) == nil)
 }
 @Test func lastActionSurvivesLaterTextLine() throws {

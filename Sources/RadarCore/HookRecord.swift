@@ -49,11 +49,10 @@ public func makeHookEvent(from input: [String: Any], now: Double) -> HookEvent? 
 
 public func sessionStartContext(statusFile: URL) -> String {
     """
-    Session Radar: Kullanıcı session'larını bir menü çubuğu uygulamasından takip ediyor. Kod değişikliği ya da çok adımlı bir iş yapıyorsan durumunu Write tool ile şu dosyaya yaz (her seferinde dosyanın tamamını yeniden yaz; dosya varsa önce Read ile oku ve "topics" listesini koruyarak güncelle):
+    Session Radar: Kullanıcı session'larını bir menü çubuğu uygulamasından takip ediyor. Kod değişikliği ya da çok adımlı bir iş yapıyorsan durumunu Write tool ile şu dosyaya yaz (her seferinde dosyanın tamamını yeniden yaz):
     \(statusFile.path)
-    Biçim: {"task":"…","why":"…","phase":"…","next":"…","todo":[{"text":"…","done":false}],"problems":[],"topics":[{"title":"…","state":"active"}]}
-    "topics": bu session'da baştan beri ele alınan konular, eskiden yeniye. Şu an çalışılan konu "active" (yalnızca bir tane), yarım kalıp dönülecek olanlar "open", kapananlar "done". Konu değişince eskisinin durumunu güncelle ve yenisini sona ekle.
-    Ne zaman: göreve başlarken, konu ya da aşama değişince, iş bitince, bir sorun çıkınca veya çözülünce; her adımda değil. Alanlar Türkçe ve en fazla birer cümle olsun. Sorun çözülünce "problems" listesini boşalt. Basit soru-cevaplarda dosyayı yazma.
+    Biçim: {"task":"…","why":"…","phase":"…","next":"…","todo":[{"text":"…","done":false}],"problems":[]}
+    Ne zaman: göreve başlarken, aşama değişince, iş bitince, bir sorun çıkınca veya çözülünce; her adımda değil. Alanlar Türkçe ve en fazla birer cümle olsun. Sorun çözülünce "problems" listesini boşalt. Basit soru-cevaplarda dosyayı yazma.
     """
 }
 
