@@ -99,18 +99,30 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     - Başlıklar en fazla 6 kelime, özetler en fazla 3 cümle olsun ve Türkçe yazılsın.
     - Bir konunun işi bitmişse "done", yarım kalıp sonra dönülecekse "open" olarak işaretle.
     - Başlıklar gereksiz yere değiştirilmesin.
+    - \(dataNotice)
 
     Mevcut konular:
-    \(topicLines)
+    \(dataBlock(topicLines))
 
     Yeni istekler:
-    \(reqLines)
+    \(dataBlock(reqLines))
     """
 }
 
+/// Model metni arayüzde gösterilir ve paylaşılır: tek satır, kontrol/biçim karakteri yok, uzunluk sınırlı
+private func oneLine(_ s: String, max: Int) -> String {
+    let kept = s.unicodeScalars.filter { $0.properties.isWhitespace || !CharacterSet.controlCharacters.contains($0) }
+    return String(String(String.UnicodeScalarView(kept)).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(max))
+}
+
 public func parseTopicResponse(_ output: String) -> TopicResponse? {
-    guard let a = output.firstIndex(of: "{"), let b = output.lastIndex(of: "}"), a < b else { return nil }
-    return try? JSONDecoder().decode(TopicResponse.self, from: Data(output[a...b].utf8))
+    guard let a = output.firstIndex(of: "{"), let b = output.lastIndex(of: "}"), a < b,
+          var r = try? JSONDecoder().decode(TopicResponse.self, from: Data(output[a...b].utf8)) else { return nil }
+    for i in r.topics.indices {
+        r.topics[i].title = oneLine(r.topics[i].title, max: 80)
+        r.topics[i].summary = oneLine(r.topics[i].summary, max: 500)
+    }
+    return r
 }
 
 public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests: [Request]) -> [Topic]? {
