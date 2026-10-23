@@ -16,16 +16,38 @@ import UserNotifications
     /// session başına "Soru sor" durumu; popover kapanınca kaybolmasın
     // ponytail: listeden düşen session'ların kaydı silinmez; birkaç kısa metin, uygulama yeniden açılınca gider
     var asks: [String: AskState] = [:]
+    /// değişince diske yazılır; TeamSync her adımda dosyadan okur
+    var team: TeamSettings {
+        didSet {
+            guard team != oldValue else { return }
+            do { try writeJSON(team, to: paths.teamSettingsFile) } catch {
+                lastError = "Ekip ayarları kaydedilemedi: \(error.localizedDescription)"
+            }
+        }
+    }
+    var sharingDown = false
+    var teamSignedIn: Bool
+    /// Info.plist'te SupabaseURL ve SupabaseAnonKey var mı
+    let teamConfigured: Bool
 
     private let paths = RadarPaths.fromEnvironment()
     private let engine: Engine
+    private let teamSync: TeamSync
     @ObservationIgnored private var claudePath: String?
     @ObservationIgnored private var lastLookup = Date.distantPast
     @ObservationIgnored private var started = false
     @ObservationIgnored private var slowRunning = false
     @ObservationIgnored private var groupingRunning = false
+    @ObservationIgnored private var teamRunning = false
 
-    init() { engine = Engine(paths: paths) }
+    init() {
+        engine = Engine(paths: paths)
+        let config = supabaseConfig(Bundle.main.infoDictionary ?? [:])
+        teamConfigured = config != nil
+        teamSync = TeamSync(paths: paths, config: config)
+        team = readJSON(TeamSettings.self, from: paths.teamSettingsFile) ?? TeamSettings()
+        teamSignedIn = readJSON(AuthSession.self, from: paths.teamAuthFile) != nil
+    }
 
     func start() {
         guard !started else { return }
@@ -44,9 +66,36 @@ import UserNotifications
                         slowRunning = false
                     }
                 }
+                if n % 30 == 0, !teamRunning {
+                    teamRunning = true
+                    Task {
+                        await teamStep()
+                        teamRunning = false
+                    }
+                }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+    }
+
+    /// Hata metni döner; başarıda nil.
+    func teamSignIn(email: String, password: String) async -> String? {
+        let error = await teamSync.signIn(email: email, password: password)
+        teamSignedIn = readJSON(AuthSession.self, from: paths.teamAuthFile) != nil
+        return error
+    }
+
+    func teamSignOut() {
+        Task {
+            await teamSync.signOut()
+            teamSignedIn = readJSON(AuthSession.self, from: paths.teamAuthFile) != nil
+        }
+    }
+
+    private func teamStep() async {
+        let r = await teamSync.step(sessions: sessions, histories: histories, now: Date())
+        for n in r.notifications { post(n) }
+        if sharingDown != r.down { sharingDown = r.down }
     }
 
     /// Taslak soruyu sorar; aynı session'da cevap beklenirken ikinci çağrı başlamaz.
@@ -147,6 +196,13 @@ struct AskState: Equatable {
     var busy = false
 }
 
+/// Biri eksik ya da boşsa nil.
+private func supabaseConfig(_ info: [String: Any]) -> SupabaseConfig? {
+    guard let s = info["SupabaseURL"] as? String, !s.isEmpty, let url = URL(string: s),
+          let key = info["SupabaseAnonKey"] as? String, !key.isEmpty else { return nil }
+    return SupabaseConfig(url: url, anonKey: key)
+}
+
 private func mtime(_ url: URL) -> Date? {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
 }
@@ -196,7 +252,7 @@ private actor Engine {
 
     func prune() {
         let fm = FileManager.default, cutoff = Date().addingTimeInterval(-7 * 86400)
-        for dir in [paths.eventsDir, paths.statusDir, paths.topicsDir] {
+        for dir in [paths.eventsDir, paths.statusDir, paths.topicsDir, paths.teamDir.appending(path: "delivered")] {
             for url in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             where (mtime(url) ?? .distantFuture) < cutoff {
                 try? fm.removeItem(at: url)
