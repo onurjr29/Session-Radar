@@ -23,9 +23,18 @@ public struct SessionInputs: Sendable {
     }
 }
 
-public func isAlive(_ agent: AgentEntry?, probe: (Int32) -> Bool = { kill($0, 0) == 0 }) -> Bool {
+/// Sürecin başlangıç zamanı (epoch sn); süreç yoksa nil. Her saniye çağrılır, ps çalıştırmaz.
+public func processStartTime(_ pid: Int32) -> Double? {
+    var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.stride
+    var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    guard pid > 0, sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+    let t = info.kp_proc.p_starttime
+    return Double(t.tv_sec) + Double(t.tv_usec) / 1_000_000
+}
+
+public func isAlive(_ agent: AgentEntry?, probe: (Int32) -> Double? = processStartTime) -> Bool {
     guard let pid = agent?.pid else { return false }
-    return probe(pid)
+    return probe(pid) != nil
 }
 
 public struct Candidate: Equatable, Sendable {
@@ -42,9 +51,13 @@ public struct Candidate: Equatable, Sendable {
 /// Canlı: kayıt dosyasındaki ya da agents'taki pid çalışıyor, veya son 15 sn içinde olay gelmiş.
 public func sessionCandidates(agents: [AgentEntry], registry: [RegistryEntry], activities: [String: Activity],
                               seenAlive: Set<String>, paths: RadarPaths, now: Date,
-                              probe: (Int32) -> Bool = { kill($0, 0) == 0 }) -> [Candidate] {
-    // aynı session'ın eski süreçten kalmış kaydı olabilir; yalnızca pid'i çalışanlar
-    let live = Dictionary(registry.filter { probe($0.pid) }.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
+                              probe: (Int32) -> Double? = processStartTime) -> [Candidate] {
+    // aynı session'ın eski süreçten kalmış kaydı olabilir; yalnızca pid'i çalışanlar. Kayıt dosyası süreçten uzun
+    // yaşayıp pid başkasına geçmiş olabilir: procStart varsa sürecin başlangıcıyla eşleşmeli
+    let live = Dictionary(registry.filter { r in
+        guard let start = probe(r.pid) else { return false }
+        return r.procStart.flatMap(parseProcStart).map { abs($0 - start) <= 2 } ?? true
+    }.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
     let byId = Dictionary(agents.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
     let t = now.timeIntervalSince1970
     let recent = activities.filter { ($0.value.lastEventAt ?? 0) >= t - 86400 }.keys

@@ -13,6 +13,15 @@ public struct RegistryEntry: Codable, Equatable, Sendable {
     public var kind: String?
     public var status: String?
     public var statusUpdatedAt: Double?
+    /// sürecin başlangıcı, `LC_ALL=C TZ=UTC ps -o lstart=` biçiminde: "Sat Oct 17 23:31:27 2026"
+    public var procStart: String?
+}
+
+/// procStart → epoch sn (UTC); gün tek haneliyse boşlukla doldurulmuş olabilir. Çözülemezse nil, kontrol atlanır.
+public func parseProcStart(_ s: String) -> Double? {
+    var t = tm()
+    guard strptime(s, "%a %b %e %H:%M:%S %Y", &t) != nil else { return nil }
+    return Double(timegm(&t))
 }
 
 public func loadRegistry(dir: URL) -> [RegistryEntry] {

@@ -28,7 +28,7 @@ func snap(_ id: String, _ st: SessionState, note: String? = nil, task: String? =
 }
 @Test func isAliveFalseWithoutPid() {
     let a = AgentEntry(id: "x", pid: nil, sessionId: "s", name: nil, cwd: "/r", kind: "background", startedAt: nil, status: nil, state: "blocked")
-    #expect(!isAlive(a, probe: { _ in true }) && !isAlive(nil))
+    #expect(!isAlive(a, probe: { _ in 0 }) && !isAlive(nil))
 }
 @Test func snapshotFallsBackToTranscript() {
     let s = buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: true, seenAlive: true, activity: nil, status: nil,
@@ -52,7 +52,7 @@ private func reg(_ sid: String, pid: Int32, status: String? = nil, at ms: Double
 private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], activities: [String: Activity],
                     seen: Set<String> = [], live: Set<Int32> = [], now: Double = 1000) -> [String: SessionState] {
     let list = sessionCandidates(agents: agents, registry: registry, activities: activities, seenAlive: seen,
-                                 paths: radarPaths, now: Date(timeIntervalSince1970: now), probe: { live.contains($0) })
+                                 paths: radarPaths, now: Date(timeIntervalSince1970: now), probe: { live.contains($0) ? 0 : nil })
     return Dictionary(uniqueKeysWithValues: list.map { c in
         (c.id, buildSnapshot(SessionInputs(sessionId: c.id, agent: c.agent, registry: c.registry, alive: c.alive,
                                            seenAlive: c.seenAlive, activity: c.activity, status: nil, transcript: nil,
@@ -114,9 +114,30 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     // aynı session'ın eski süreçten kalan kaydı canlı olanı gölgelemez
     let list = sessionCandidates(agents: [agent], registry: [reg("s", pid: 6), reg("s", pid: 7), reg("x", pid: 9)],
                                  activities: ["s": act(.working, at: 0)], seenAlive: [], paths: radarPaths,
-                                 now: Date(timeIntervalSince1970: 1000), probe: { [7, 8].contains($0) })
+                                 now: Date(timeIntervalSince1970: 1000), probe: { [7, 8].contains($0) ? 0 : nil })
     #expect(list.sorted { $0.id < $1.id }.map { "\($0.id):\($0.alive):\($0.seenAlive):\($0.registry?.pid ?? 0)" }
             == ["a:true:true:0", "s:true:true:7"])
+}
+@Test func reusedPidDoesNotKeepRegistryAlive() {
+    // procStart `LC_ALL=C TZ=UTC ps -o lstart=` çıktısı; gün tek haneliyse boşlukla doldurulur
+    #expect(parseProcStart("Sat Oct 17 23:31:27 2026") == 1792279887)
+    #expect(parseProcStart("Fri Oct  2 01:02:03 2026") == 1790902923)
+    #expect(parseProcStart("dün") == nil)
+    var r = reg("s", pid: 7); r.procStart = "Sat Oct 17 23:31:27 2026"
+    func alive(_ r: RegistryEntry, start: Double?) -> Bool? {
+        sessionCandidates(agents: [], registry: [r], activities: ["s": act(.turnDone, at: 900)], seenAlive: [], paths: radarPaths,
+                          now: Date(timeIntervalSince1970: 1000), probe: { _ in start }).first?.alive
+    }
+    #expect(alive(r, start: 1792279887.6) == true)
+    #expect(alive(r, start: 1792290000) == false)   // kayıt dosyası eski sürecin, pid başkasına geçmiş
+    #expect(alive(r, start: nil) == false)
+    r.procStart = nil
+    #expect(alive(r, start: 1792290000) == true)
+}
+@Test func processStartTimeReadsLiveProcess() throws {
+    let start = try #require(processStartTime(getpid()))
+    #expect(start <= Date().timeIntervalSince1970 && start > Date().timeIntervalSince1970 - 3600)
+    #expect(processStartTime(Int32.max) == nil)
 }
 @Test func snapshotKeepsRepoRoot() {
     let s = buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: true, seenAlive: true, activity: nil,
