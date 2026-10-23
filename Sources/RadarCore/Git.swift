@@ -45,23 +45,10 @@ public struct RepoInfo: Equatable, Sendable {
 }
 
 private func run(_ git: String, _ args: [String], cwd: String) -> Data? {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: git)
-    p.arguments = ["-C", cwd] + args
-    let out = Pipe()
-    p.standardOutput = out
-    p.standardError = FileHandle.nullDevice
-    p.standardInput = FileHandle.nullDevice
     // arka plan poller'ı index.lock almasın
-    p.environment = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }
-    do { try p.run() } catch { return nil }
-    // takılan git 10 sn sonra öldürülür; stdout EOF'a kadar okunur
-    let killer = DispatchWorkItem { if p.isRunning { p.terminate() } }
-    DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: killer)
-    let data = out.fileHandleForReading.readDataToEndOfFile()
-    p.waitUntilExit()
-    killer.cancel()
-    return p.terminationStatus == 0 ? data : nil
+    let env = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }
+    guard let r = runProcess(git, ["-C", cwd] + args, environment: env, timeout: 10), r.status == 0 else { return nil }
+    return r.stdout
 }
 
 public func repoInfo(cwd: String, git: String = "/usr/bin/git") -> RepoInfo? {
