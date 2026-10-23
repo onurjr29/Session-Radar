@@ -16,6 +16,8 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public var backgroundTasks: Int?
     /// SessionStart: startup | resume | clear | compact
     public var source: String?
+    /// hook'u çalıştıran Claude süreci; eski satırlarda yok
+    public var pid: Int32?
 }
 
 public struct TodoItem: Codable, Equatable, Sendable { public var text: String; public var done: Bool }

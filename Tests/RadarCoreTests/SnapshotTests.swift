@@ -134,6 +134,20 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     r.procStart = nil
     #expect(alive(r, start: 1792290000) == true)
 }
+@Test func sessionWithoutRegistryLivesWhileHookPidRuns() {
+    // kayıt dosyası ve agents satırı yok (ör. claude -p); uzun tool çağrısında 100 sn olay gelmiyor
+    var e = ev("PreToolUse", tool: "Bash", target: "sleep 300", ts: 900); e.pid = 5
+    let a = reduceEvents([e])
+    func alive(_ starts: [Int32: Double], registry: [RegistryEntry] = []) -> Bool? {
+        sessionCandidates(agents: [], registry: registry, activities: ["h": a], seenAlive: [], paths: radarPaths,
+                          now: Date(timeIntervalSince1970: 1000), probe: { starts[$0] }).first { $0.id == "h" }?.alive
+    }
+    #expect(alive([5: 800]) == true)
+    #expect(alive([:]) == false)
+    #expect(alive([5: 950]) == false)   // süreç son olaydan sonra başlamış: pid başkasına geçmiş
+    // pid'in kayıt dosyası varsa o esas: aynı süreç /clear ya da /resume ile başka session'a geçmiş
+    #expect(alive([5: 800], registry: [reg("other", pid: 5)]) == false)
+}
 @Test func processStartTimeReadsLiveProcess() throws {
     let start = try #require(processStartTime(getpid()))
     #expect(start <= Date().timeIntervalSince1970 && start > Date().timeIntervalSince1970 - 3600)

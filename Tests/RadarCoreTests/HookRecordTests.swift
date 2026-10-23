@@ -34,6 +34,14 @@ import Foundation
     let lines = try String(contentsOf: paths.eventLog("s-1"), encoding: .utf8).split(separator: "\n")
     #expect(lines.count == 2)
 }
+@Test func runHookRecordsOwnerPid() throws {
+    let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+    let stop = try JSONSerialization.data(withJSONObject: ["hook_event_name": "Stop", "session_id": "s-1"])
+    _ = runHook(stdin: stop, paths: paths, now: 1, pid: 42)
+    #expect(try JSONDecoder().decode(HookEvent.self, from: Data(contentsOf: paths.eventLog("s-1"))).pid == 42)
+    // eski satırlarda pid yok
+    #expect(try JSONDecoder().decode(HookEvent.self, from: Data(#"{"ts":1,"event":"Stop","sessionId":"s"}"#.utf8)).pid == nil)
+}
 @Test func runHookIgnoresMalformedInput() {
     let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
     #expect(runHook(stdin: Data("not json".utf8), paths: paths, now: 1) == nil)

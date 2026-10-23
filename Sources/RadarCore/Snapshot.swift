@@ -65,7 +65,10 @@ public func sessionCandidates(agents: [AgentEntry], registry: [RegistryEntry], a
         let agent = byId[id], reg = live[id], activity = activities[id]
         let cwd = agent?.cwd ?? reg?.cwd ?? activity?.cwd ?? ""
         if !cwd.isEmpty && paths.isInternal(cwd: cwd) { return nil }
-        let pidAlive = reg != nil || isAlive(agent, probe: probe)
+        // kayıt dosyası olmayan session (ör. claude -p): hook olayındaki pid. Süreç son olaydan sonra başladıysa pid
+        // başkasına geçmiştir; pid'in canlı kaydı varsa o esas (aynı süreç /clear ile başka session'a geçmiş olabilir)
+        let owner = activity?.pid.flatMap { p in live.values.contains { $0.pid == p } ? nil : probe(p) }
+        let pidAlive = reg != nil || isAlive(agent, probe: probe) || owner.map { $0 <= (activity?.lastEventAt ?? 0) } == true
         // kayıt dosyası ilk olaydan biraz sonra yazılabilir
         let fresh = (activity?.lastEventAt ?? 0) >= t - 15
         return Candidate(id: id, agent: agent, registry: reg, activity: activity, cwd: cwd,

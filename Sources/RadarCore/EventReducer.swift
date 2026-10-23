@@ -10,6 +10,8 @@ public struct Activity: Equatable, Sendable {
     public var ended = false
     public var cwd: String?
     public var transcriptPath: String?
+    /// son olayı yazan Claude süreci
+    public var pid: Int32?
     public init() {}
 }
 
@@ -35,6 +37,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
     a.lastEvent = e.event
     if let c = e.cwd { a.cwd = c }
     if let p = e.transcriptPath { a.transcriptPath = p }
+    if let p = e.pid { a.pid = p }
 
     switch e.event {
     // compaction aynı turun devamıdır, durum korunur; resume/clear aynı id ile yeniden açar

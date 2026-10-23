@@ -69,10 +69,11 @@ public func appendLine(_ line: Data, to url: URL) throws {
     guard n == data.count else { throw CocoaError(.fileWriteUnknown) }
 }
 
-public func runHook(stdin: Data, paths: RadarPaths, now: Double) -> String? {
+public func runHook(stdin: Data, paths: RadarPaths, now: Double, pid: Int32? = nil) -> String? {
     guard let obj = try? JSONSerialization.jsonObject(with: stdin) as? [String: Any],
-          let event = makeHookEvent(from: obj, now: now),
-          let line = try? JSONEncoder().encode(event) else { return nil }
+          var event = makeHookEvent(from: obj, now: now) else { return nil }
+    event.pid = pid
+    guard let line = try? JSONEncoder().encode(event) else { return nil }
     try? appendLine(line, to: paths.eventLog(event.sessionId))
     return event.event == "SessionStart" ? sessionStartContext(statusFile: paths.statusFile(event.sessionId)) : nil
 }
