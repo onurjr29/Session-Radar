@@ -41,6 +41,13 @@ public struct TopicResponse: Decodable, Equatable, Sendable {
     public struct Item: Decodable, Equatable, Sendable {
         public var id: Int; public var title: String; public var state: String; public var summary: String
         public var from: Int?
+        private enum CodingKeys: String, CodingKey { case id, title, state, summary, from }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(Int.self, forKey: .id); title = try c.decode(String.self, forKey: .title)
+            state = try c.decode(String.self, forKey: .state); summary = try c.decode(String.self, forKey: .summary)
+            from = (try? c.decodeIfPresent(Int.self, forKey: .from)) ?? nil   // bozuk sapak tüm yanıtı düşürmez
+        }
     }
     public var topics: [Item]
     public var assign: [String: Int]   // "istek no" -> konu id
@@ -154,10 +161,15 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
     // geçerli sapak: listede var, kendisi değil, ondan önce başlamış
     let start = Dictionary(uniqueKeysWithValues: topics.map { ($0.id, $0.requests.min() ?? 0) })
     for i in topics.indices {
-        if let f = topics[i].from, f != topics[i].id, let s = start[f], s < (topics[i].requests.min() ?? 0) { continue }
-        topics[i].from = nil
+        topics[i].from = validFrom(topics[i], starts: start)
     }
     return topics
+}
+
+/// Geçerli sapak: listede var, kendisi değil, ondan önce başlamış. starts: konu id -> ilk istek no.
+func validFrom(_ t: Topic, starts: [Int: Int]) -> Int? {
+    guard let f = t.from, f != t.id, let s = starts[f], s < (t.requests.min() ?? 0) else { return nil }
+    return f
 }
 
 public func loadTopicFile(_ url: URL) -> TopicFile? {

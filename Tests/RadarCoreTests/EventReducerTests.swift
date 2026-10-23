@@ -158,3 +158,8 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     let b = reduceEvents([ev("Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash")])
     #expect(b.note == "Claude needs your permission to use Bash")
 }
+@Test func permissionNoteFallsBackWhenToolDiffers() {
+    let a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "npm run migrate"),
+                          ev("Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Edit")])
+    #expect(a.note == "Claude needs your permission to use Edit")
+}

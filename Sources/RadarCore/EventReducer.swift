@@ -64,7 +64,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         switch e.notificationType {
         case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog":
             // PreToolUse izin penceresinden önce gelir; action bekleyen tool'dur
-            a.state = .waiting; a.note = e.notificationType == "permission_prompt" ? (a.action ?? e.message) : e.message
+            a.state = .waiting; a.note = e.notificationType == "permission_prompt" ? pendingToolNote(a.action, message: e.message) : e.message
             a.waitingOnTool = e.notificationType == "permission_prompt"
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
@@ -172,4 +172,12 @@ public final class EventLogReader: @unchecked Sendable {
         }
         return out
     }
+}
+
+/// Paralel subagent'larda action başka bir tool'a ait olabilir; yalnızca mesaj aynı tool'u anıyorsa kullanılır.
+private func pendingToolNote(_ action: String?, message: String?) -> String? {
+    guard let action else { return message }
+    guard let message else { return action }
+    let tool = action.components(separatedBy: " · ").first ?? action
+    return message.hasSuffix(" " + tool) ? action : message
 }

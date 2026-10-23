@@ -16,7 +16,7 @@ struct AskBox: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { store.sendAsk(sessionId) }
                 Button("Sor") { store.sendAsk(sessionId) }
-                    .disabled(state.busy || state.question.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(state.busy || state.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             if state.busy {
                 ProgressView().controlSize(.small)

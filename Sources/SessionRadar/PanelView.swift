@@ -47,9 +47,8 @@ struct PanelContent: View {
                 .frame(height: min(contentHeight, 520))
             }
             if let lastError {
-                Text(lastError)
+                Label { Text(lastError) } icon: { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red) }
                     .font(.caption)
-                    .foregroundStyle(.red)
                     .lineLimit(1)
                     .help(lastError)
                     .padding(.horizontal, 21)
@@ -134,21 +133,6 @@ struct PanelContent: View {
         let files = c.files.prefix(2).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
         let more = c.files.count > 2 ? " +\(c.files.count - 2)" : ""
         return "Çakışma: \(name(c.a)) ↔ \(name(c.b)) · \(files)\(more)"
-    }
-}
-
-/// Bekleme süresi: "4 dk", "2 sa", "1 gün".
-private func waitText(since date: Date, now: Date) -> String {
-    let m = max(1, Int(now.timeIntervalSince(date) / 60))
-    return m < 60 ? "\(m) dk" : m < 1440 ? "\(m / 60) sa" : "\(m / 1440) gün"
-}
-
-/// Satırın sağındaki küçük yazı: bekleyende bekleme süresi, çalışanda ve sorunluda ilerleme.
-func trailingText(_ s: SessionSnapshot, now: Date) -> String? {
-    switch s.state {
-    case .waiting: s.waitingSince.map { waitText(since: $0, now: now) }
-    case .working, .problem: s.progress.map { "\($0.done)/\($0.total)" }
-    default: nil
     }
 }
 
@@ -265,7 +249,7 @@ struct TopicStrip: View {
     }
 
     private func stateLabel(_ t: Topic) -> String {
-        topicStateLabel(t.state, sessionClosed: session.state == .closed || !session.alive)
+        topicStateLabel(t.state, sessionClosed: session.isOver)
     }
 
     private func dot(_ t: Topic) -> some View {

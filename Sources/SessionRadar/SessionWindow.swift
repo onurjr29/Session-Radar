@@ -205,7 +205,7 @@ private struct StepsList: View {
 
     private func details(_ t: Topic) -> some View {
         let mine = requests.filter { t.requests.contains($0.index) }
-        let closed = session.state == .closed || !session.alive
+        let closed = session.isOver
         let meta: [String?] = [topicStateLabel(t.state, sessionClosed: closed), timeRange(mine.compactMap(\.at)), "\(t.requests.count) istek"]
         return VStack(alignment: .leading, spacing: 5) {
             Text(meta.compactMap { $0 }.joined(separator: " · ")).foregroundStyle(.secondary)

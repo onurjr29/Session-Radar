@@ -8,6 +8,10 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     let out = "İşte sonuç:\n```json\n{\"topics\":[{\"id\":1,\"title\":\"Giriş hatası\",\"state\":\"active\",\"summary\":\"Login düzeltildi.\"}],\"assign\":{\"1\":1}}\n```"
     #expect(parseTopicResponse(out)?.assign == ["1": 1])
 }
+@Test func parseToleratesMalformedFrom() throws {
+    let r = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":"","from":"3"},{"id":2,"title":"B","state":"active","summary":"","from":{"x":1}}],"assign":{"1":1}}"#))
+    #expect(r.topics.count == 2 && r.topics.allSatisfy { $0.from == nil })
+}
 @Test func parseResponseRejectsGarbage() {
     #expect(parseTopicResponse("Üzgünüm, yapamam.") == nil)
     #expect(parseTopicResponse("{\"topics\": 3}") == nil)

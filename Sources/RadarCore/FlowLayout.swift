@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 public struct FlowNode: Equatable, Sendable {
@@ -12,14 +13,13 @@ public struct FlowNode: Equatable, Sendable {
 
 public func flowLayout(_ topics: [Topic]) -> [FlowNode] {
     let sorted = topics.sorted { ($0.requests.min() ?? .max) < ($1.requests.min() ?? .max) }
-    let byId = Dictionary(sorted.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let starts = Dictionary(sorted.compactMap { t in t.requests.min().map { (t.id, $0) } }, uniquingKeysWith: { a, _ in a })
     var lanes: [Int: Int] = [:]
     var next = -1
     return sorted.enumerated().map { col, t in
         var lane = 0
         var parent: Int?
-        if t.state != "done", let f = t.from, f != t.id, let p = byId[f],
-           let pm = p.requests.min(), let tm = t.requests.min(), pm < tm {
+        if t.state != "done", let f = validFrom(t, starts: starts) {
             parent = f
             if let pl = lanes[f], pl != 0 {
                 lane = pl + pl.signum()

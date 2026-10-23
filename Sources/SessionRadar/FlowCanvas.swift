@@ -243,7 +243,7 @@ struct FlowCanvas: View {
             return l
         }
 
-        let closed = session.state == .closed || !session.alive
+        let closed = session.isOver
         let info = activeInfo
         let byId = Dictionary(topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var frames: [Int: CGRect] = [:]
@@ -285,8 +285,8 @@ struct FlowCanvas: View {
         var info = ActiveInfo(action: session.action, task: st?.task, next: st?.next, todo: st?.todo ?? [],
                               problems: st?.problems?.filter { !$0.isEmpty } ?? [],
                               note: nil, noteIsProblem: session.state == .problem)
-        // sorun nedeni (çökme, API hatası) yalnızca notta; sorun listesi varsa not onun kopyasıdır
-        if session.state == .waiting || (info.noteIsProblem && info.problems.isEmpty) { info.note = session.note }
+        // sorun nedeni (çökme, API hatası) notta; resolveState sorun listesini "; " ile birleştirip not yapar, o kopya gösterilmez
+        if session.state == .waiting || (info.noteIsProblem && session.note != info.problems.joined(separator: "; ")) { info.note = session.note }
         return info.rows == 0 ? nil : info
     }
 
@@ -488,7 +488,7 @@ private struct FlowCard: View, Equatable {
                 if let label = card.label {
                     Text(label)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(card.color)
+                        .foregroundStyle(.primary)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 1.5)
                         .background(card.color.opacity(0.15), in: Capsule())
@@ -531,16 +531,16 @@ private struct InfoRows: View {
                 row("exclamationmark.triangle.fill", p, .red)
             }
             if let v = info.note {
-                info.noteIsProblem ? row("exclamationmark.triangle.fill", v, .red, lines: 3) : row("hand.raised.fill", v, .orange, lines: 3)
+                info.noteIsProblem ? row("exclamationmark.triangle.fill", v, .red, lines: 3) : row("hand.raised.fill", v, .orange, lines: 3, textColor: .primary)
             }
         }
         .font(.subheadline)
     }
 
-    private func row(_ symbol: String, _ text: String, _ color: Color, lines: Int = 2) -> some View {
+    private func row(_ symbol: String, _ text: String, _ color: Color, lines: Int = 2, textColor: Color? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol).frame(width: 13).foregroundStyle(color == .primary ? .secondary : color)
-            Text(text).foregroundStyle(color).lineLimit(lines).truncationMode(.middle)
+            Text(text).foregroundStyle(textColor ?? color).lineLimit(lines).truncationMode(.middle)
         }
     }
 }
