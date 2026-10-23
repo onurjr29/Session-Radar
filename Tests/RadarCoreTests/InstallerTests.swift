@@ -33,3 +33,25 @@ private func canon(_ d: [String: Any]) -> String { String(decoding: try! JSONSer
     let d = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
     #expect((d?["hooks"] as? [String: Any])?.count == radarHookEvents.count)
 }
+@Test func installRefusesUnexpectedShapes() throws {
+    for bad in ["{\"hooks\": \"x\"}", "{\"permissions\": {\"allow\": \"x\"}}"] {
+        let url = try tempFile(bad)
+        #expect(throws: InstallError.self) { try installSettings(at: url, hookCommand: "x/radar-hook") }
+        #expect(try String(contentsOf: url, encoding: .utf8) == bad)
+        #expect(!FileManager.default.fileExists(atPath: url.path + ".session-radar.bak"))
+    }
+}
+@Test func mergeKeepsNonStringAllowEntries() {
+    let s: [String: Any] = ["permissions": ["allow": ["Bash(ls:*)", 42] as [Any]]]
+    let m = mergeSettings(s, hookCommand: "x/radar-hook")
+    let allow = (m["permissions"] as? [String: Any])?["allow"] as? [Any] ?? []
+    #expect(allow.contains { ($0 as? Int) == 42 })
+    #expect(Set(allow.compactMap { $0 as? String }) == Set(["Bash(ls:*)"] + radarPermissionRules))
+    #expect(canon(unmergeSettings(m)) == canon(s))
+}
+@Test func backupKeepsOriginal() throws {
+    let url = try tempFile("{\"a\": 1}")
+    try installSettings(at: url, hookCommand: "x/radar-hook")
+    try installSettings(at: url, hookCommand: "x/radar-hook")
+    #expect(try String(contentsOfFile: url.path + ".session-radar.bak", encoding: .utf8) == "{\"a\": 1}")
+}

@@ -27,8 +27,8 @@ public func unmergeSettings(_ s: [String: Any]) -> [String: Any] {
         }
         if kept.isEmpty { out["hooks"] = nil } else { out["hooks"] = kept }
     }
-    if var perms = s["permissions"] as? [String: Any], let allow = perms["allow"] as? [String] {
-        let rest = allow.filter { !radarPermissionRules.contains($0) }
+    if var perms = s["permissions"] as? [String: Any], let allow = perms["allow"] as? [Any] {
+        let rest = allow.filter { !radarPermissionRules.contains(($0 as? String) ?? "") }
         if rest.count != allow.count {
             perms["allow"] = rest.isEmpty ? nil : rest
             out["permissions"] = perms.isEmpty ? nil : perms
@@ -46,11 +46,23 @@ public func mergeSettings(_ s: [String: Any], hookCommand: String) -> [String: A
     }
     out["hooks"] = hooks
     var perms = out["permissions"] as? [String: Any] ?? [:]
-    var allow = perms["allow"] as? [String] ?? []
-    allow += radarPermissionRules.filter { !allow.contains($0) }
+    var allow = perms["allow"] as? [Any] ?? []
+    let present = Set(allow.compactMap { $0 as? String })
+    allow += radarPermissionRules.filter { !present.contains($0) }
     perms["allow"] = allow
     out["permissions"] = perms
     return out
+}
+
+// Beklenmeyen tipteki kullanıcı verisinin üzerine yazmamak için fırlatır.
+private func checkShapes(_ s: [String: Any], _ url: URL) throws {
+    func bad(_ what: String) -> InstallError { .unreadableSettings("\(what): \(url.path)") }
+    if let h = s["hooks"] {
+        guard let d = h as? [String: Any], d.values.allSatisfy({ $0 is [Any] }) else { throw bad("hooks beklenen biçimde değil") }
+    }
+    if let p = s["permissions"] {
+        guard let d = p as? [String: Any], d["allow"] == nil || d["allow"] is [Any] else { throw bad("permissions beklenen biçimde değil") }
+    }
 }
 
 // Dosya yoksa boş ayarlar döner; bozuksa ya da nesne değilse fırlatır (hiçbir şey yazılmaz).
@@ -61,6 +73,7 @@ private func readSettings(_ url: URL) throws -> [String: Any]? {
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw InstallError.unreadableSettings("JSON nesnesi değil: \(url.path)")
         }
+        try checkShapes(obj, url)
         return obj
     } catch let e as InstallError { throw e }
     catch { throw InstallError.unreadableSettings("\(url.path): \(error.localizedDescription)") }
@@ -69,8 +82,8 @@ private func readSettings(_ url: URL) throws -> [String: Any]? {
 private func writeSettings(_ s: [String: Any], to url: URL, backup: Bool) throws {
     if backup {
         let bak = URL(fileURLWithPath: url.path + ".session-radar.bak")
-        try? FileManager.default.removeItem(at: bak)
-        try FileManager.default.copyItem(at: url, to: bak)
+        // İlk yedek korunur: radar öncesi özgün dosya kaybolmasın.
+        if !FileManager.default.fileExists(atPath: bak.path) { try FileManager.default.copyItem(at: url, to: bak) }
     }
     let data = try JSONSerialization.data(withJSONObject: s, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     try data.write(to: url, options: .atomic)
