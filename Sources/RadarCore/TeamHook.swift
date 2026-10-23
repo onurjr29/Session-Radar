@@ -104,11 +104,12 @@ public func teamHook(_ e: HookEvent, state: TeamState?, delivered: TeamDelivered
         now.timeIntervalSince($0.lastRequestAt) < claimMaxAge && ($0.updatedAt.map { now.timeIntervalSince($0) < teamStaleAfter } ?? true)
     }
     let key = claims.isEmpty ? nil : claims.map { "\($0.ownerName)|\($0.sessionId)|\($0.topic)|\($0.openTopics)" }.sorted().joined(separator: "\n")
-    let note = teamNote(repoName: ref.repo, claims: claims, now: now)
+    let name = ref.repo.split(separator: "/").last.map(String.init) ?? ref.repo
+    let note = teamNote(repoName: name, claims: claims, now: now)
 
     switch e.event {
     case "SessionStart":
-        r.context = teamRule(repoName: ref.repo) + (note.map { "\n\n" + $0 } ?? "")
+        r.context = teamRule(repoName: name) + (note.map { "\n\n" + $0 } ?? "")
         r.delivered.claimsKey = key
     case "UserPromptSubmit", "PostToolUse":
         if key != nil && key != delivered.claimsKey { r.context = note }

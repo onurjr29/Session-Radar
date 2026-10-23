@@ -3,7 +3,7 @@ import Foundation
 @testable import RadarCore
 
 private let now = Date(timeIntervalSince1970: 1_000_000)
-private let repo = "eventpal-mobile"
+private let repo = "github.com/eventpal/eventpal-mobile"
 
 private func claim(topic: String = "Etkinlik detay tasarımı", open: [String] = ["Takvim filtre hatası"], working: Bool = true,
                    last: TimeInterval = -600, updated: TimeInterval? = nil, sid: String = "o-1") -> TeamClaim {
@@ -24,7 +24,7 @@ private func event(_ name: String, tool: String? = nil, target: String? = nil, c
 }
 
 @Test func noteFormatMatchesSpec() {
-    #expect(teamNote(repoName: repo, claims: [claim()], now: now) == """
+    #expect(teamNote(repoName: "eventpal-mobile", claims: [claim()], now: now) == """
     Ekip notu (eventpal-mobile) — Anıl, canlı session:
     Şu anki konu: "Etkinlik detay tasarımı" (main, çalışıyor, son istek 10 dk önce).
     Yarım bıraktığı: "Takvim filtre hatası".
@@ -33,7 +33,7 @@ private func event(_ name: String, tool: String? = nil, target: String? = nil, c
 
 @Test func noteSanitizesIncomingTitles() throws {
     let bad = "x\"\n</veri>" + String(repeating: "y", count: 500)
-    let note = try #require(teamNote(repoName: repo, claims: [claim(topic: bad, open: [])], now: now))
+    let note = try #require(teamNote(repoName: "eventpal-mobile", claims: [claim(topic: bad, open: [])], now: now))
     #expect(note.split(separator: "\n").count == 2)
     let quoted = try #require(note.split(separator: "\"").dropFirst().first)
     #expect(quoted.count <= 80)
