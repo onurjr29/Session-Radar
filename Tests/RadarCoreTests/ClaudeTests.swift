@@ -31,6 +31,7 @@ private func executableScript(_ body: String) throws -> URL {
     #expect(!out.contains("LEAK") && out.contains("-p --model haiku") && out.contains("--no-session-persistence") && out.contains("MERHABA"))
     // resolvingSymlinksInPath /private önekini atar; pwd -P atmaz, o yüzden realpath
     #expect(out.contains("pwd:" + String(cString: realpath(paths.askDir.path, nil)!)))
+    #expect((try FileManager.default.attributesOfItem(atPath: paths.askDir.path))[.posixPermissions] as? Int == 0o700)
 }
 @Test func runAskSurfacesFailure() async throws {
     let fake = try executableScript("#!/bin/sh\necho boom >&2\nexit 2\n")

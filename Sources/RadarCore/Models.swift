@@ -90,6 +90,15 @@ public struct RadarPaths: Sendable {
     public func eventLog(_ sessionId: String) -> URL { eventsDir.appending(path: "\(sessionId).jsonl") }
     public func statusFile(_ sessionId: String) -> URL { statusDir.appending(path: "\(sessionId).json") }
 
+    /// Veri klasörlerini yalnızca kullanıcıya açık (0700) oluşturur; önceden var olanları da daraltır.
+    public func prepareDirectories() throws {
+        let fm = FileManager.default
+        for dir in [root, eventsDir, statusDir, askDir] {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        }
+    }
+
     public func isInternal(cwd: String) -> Bool {
         let r = root.standardizedFileURL.path
         let c = URL(fileURLWithPath: cwd).standardizedFileURL.path

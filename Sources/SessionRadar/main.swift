@@ -28,9 +28,7 @@ case "install":
     let paths = RadarPaths.fromEnvironment()
     do {
         try installSettings(at: settingsURL, hookCommand: "\"\(hook)\"")
-        for dir in [paths.eventsDir, paths.statusDir, paths.askDir] {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
+        try paths.prepareDirectories()
     } catch { fail(describe(error)) }
     print("""
     Session Radar kuruldu.
@@ -49,14 +47,25 @@ default:
     SessionRadarApp.main()
 }
 
+/// Panel açıkken uygulama öndedir; delege olmadan banner gösterilmez.
+final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+}
+
 struct SessionRadarApp: App {
     private let store = RadarStore()
+    // merkez delegeyi zayıf tutar
+    private let notificationDelegate = NotificationDelegate()
 
     init() {
         store.start()
         // swift run ile .app dışında çalışırken bu API'ler kullanılamaz
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         let store = store
+        UNUserNotificationCenter.current().delegate = notificationDelegate
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
             guard let error else { return }
             let message = "Bildirim izni alınamadı: \(error.localizedDescription)"

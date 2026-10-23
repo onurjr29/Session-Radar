@@ -58,7 +58,8 @@ public func sessionStartContext(statusFile: URL) -> String {
 }
 
 public func appendLine(_ line: Data, to url: URL) throws {
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
     let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o600)
     guard fd >= 0 else { throw CocoaError(.fileWriteUnknown) }
     defer { close(fd) }

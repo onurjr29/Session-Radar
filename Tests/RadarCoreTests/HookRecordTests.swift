@@ -47,3 +47,13 @@ import Foundation
     let start = try JSONSerialization.data(withJSONObject: ["hook_event_name": "SessionStart", "session_id": "s-1", "source": "compact"])
     #expect(runHook(stdin: start, paths: paths, now: 1) != nil)
 }
+@Test func radarDirectoriesArePrivate() throws {
+    func mode(_ url: URL) -> Int? { (try? FileManager.default.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int }
+    let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+    try appendLine(Data("{}".utf8), to: paths.eventLog("s"))
+    #expect(mode(paths.root) == 0o700 && mode(paths.eventsDir) == 0o700)
+    // önceden açık izinle oluşmuş klasör de daraltılır
+    try FileManager.default.createDirectory(at: paths.statusDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+    try paths.prepareDirectories()
+    #expect([paths.root, paths.eventsDir, paths.statusDir, paths.askDir].map(mode) == [0o700, 0o700, 0o700, 0o700])
+}

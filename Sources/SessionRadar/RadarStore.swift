@@ -11,6 +11,7 @@ import UserNotifications
     private let paths = RadarPaths.fromEnvironment()
     private let engine: Engine
     @ObservationIgnored private var claudePath: String?
+    @ObservationIgnored private var lastLookup = Date.distantPast
     @ObservationIgnored private var started = false
     @ObservationIgnored private var slowRunning = false
 
@@ -19,6 +20,7 @@ import UserNotifications
     func start() {
         guard !started else { return }
         started = true
+        do { try paths.prepareDirectories() } catch { lastError = "Veri klasörü hazırlanamadı: \(error.localizedDescription)" }
         Task {
             await engine.prune()
             // ilk anlık görüntü agents ve repo bilgisi geldikten sonra; yoksa açılışta sahte bildirim çıkar
@@ -53,7 +55,9 @@ import UserNotifications
     }
 
     private func claude() async -> String? {
-        if claudePath == nil {
+        // bulunamadıysa login shell araması en fazla dakikada bir
+        if claudePath == nil, Date().timeIntervalSince(lastLookup) >= 60 {
+            lastLookup = Date()
             let home = NSHomeDirectory(), env = ProcessInfo.processInfo.environment
             claudePath = await Task.detached { resolveClaudePath(home: home, env: env) }.value
         }
@@ -63,7 +67,9 @@ import UserNotifications
     // agents ve git: süreç çalıştırdıkları için ana thread dışında
     private func refreshSlow() async {
         let claude = await claude()
-        if claude == nil { lastError = "claude bulunamadı" }
+        let missing = "claude bulunamadı"
+        // geçici hata kırmızı yazıda kalmasın; başka hataları silmez
+        if claude == nil { lastError = missing } else if lastError == missing { lastError = nil }
         let agents = await Task.detached { claude.map { loadAgents(claudePath: $0) } ?? [] }.value
         let cwds = await engine.setAgents(agents)
         let repos = await Task.detached {

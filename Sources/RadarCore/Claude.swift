@@ -106,7 +106,8 @@ public func buildAskPrompt(question: String, status: SessionStatus?, dialogue: [
 public enum AskError: Error, Equatable { case failed(String), timedOut }
 
 public func runAsk(prompt: String, claudePath: String, paths: RadarPaths, timeout: TimeInterval = 120) async throws -> String {
-    try FileManager.default.createDirectory(at: paths.askDir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: paths.askDir, withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
     let args = ["-u", "ANTHROPIC_API_KEY", "-u", "ANTHROPIC_AUTH_TOKEN", claudePath, "-p", "--model", "haiku",
                 "--tools", "", "--no-session-persistence", "--setting-sources", "project"]
     let cwd = paths.askDir.path
