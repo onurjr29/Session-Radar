@@ -102,7 +102,7 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         pendingFiles: i.repo.map { pendingTouched(i.activity?.touched ?? [], repo: $0) } ?? [],
         transcriptPath: i.activity?.transcriptPath,
         updatedAt: updatedAt,
-        currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open)
+        currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open, alive: i.alive)
 }
 
 public func shouldKeep(_ s: SessionSnapshot, alive: Bool, now: Date) -> Bool {

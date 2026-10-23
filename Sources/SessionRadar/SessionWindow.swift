@@ -111,7 +111,7 @@ private struct SessionDetailPane: View {
             if let topics = history?.topics, !topics.isEmpty {
                 let requests = history?.requests ?? []
                 ForEach(Array(topics.enumerated()), id: \.element.id) { i, t in
-                    TopicCard(topic: t, requests: requests, closed: session.state == .closed, isLast: i == topics.count - 1)
+                    TopicCard(topic: t, requests: requests, closed: session.state == .closed || !session.alive, isLast: i == topics.count - 1)
                 }
             } else {
                 Text("Konu başlıkları henüz çıkarılmadı").foregroundStyle(.secondary)

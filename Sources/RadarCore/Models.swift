@@ -71,6 +71,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var updatedAt: Date
     public var currentTopic: String? = nil
     public var openTopics: Int = 0
+    /// süreç çalışıyor; beklenmedik kapanan session "sorun" durumunda ama canlı değil
+    public var alive = true
 }
 
 public struct RadarPaths: Sendable {

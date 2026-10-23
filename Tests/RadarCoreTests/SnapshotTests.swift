@@ -153,6 +153,13 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     #expect(start <= Date().timeIntervalSince1970 && start > Date().timeIntervalSince1970 - 3600)
     #expect(processStartTime(Int32.max) == nil)
 }
+@Test func crashedSessionSnapshotIsNotAlive() {
+    // beklenmedik kapanış "sorun" olarak görünür ama session artık yok; konu etiketi buna bakar
+    let s = buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: false, seenAlive: true,
+                                        activity: act(.working, at: 900), status: nil, transcript: nil, repo: nil,
+                                        lastSeen: Date(timeIntervalSince1970: 1000)))
+    #expect(s.state == .problem && !s.alive)
+}
 @Test func snapshotKeepsRepoRoot() {
     let s = buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: true, seenAlive: true, activity: nil,
                                         status: nil, transcript: nil,
