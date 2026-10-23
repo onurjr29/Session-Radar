@@ -33,6 +33,7 @@ extension SessionState {
 
 struct PanelView: View {
     let store: RadarStore
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -52,8 +53,10 @@ struct PanelView: View {
                     VStack(spacing: 6) {
                         ForEach(store.sessions) { SessionRow(session: $0, store: store) }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
-                .frame(maxHeight: 520)
+                // MenuBarExtra penceresi ideal boyuta göre açılır; ScrollView'ın ideal yüksekliği 0
+                .frame(height: min(contentHeight, 520))
             }
             if let error = store.lastError {
                 Text(error).font(.caption2).foregroundStyle(.red).lineLimit(2)
