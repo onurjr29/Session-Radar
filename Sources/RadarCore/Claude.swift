@@ -39,6 +39,8 @@ func runProcess(_ executable: String, _ args: [String], cwd: String? = nil, stdi
         group.leave()
     }
     if let stdin {
+        // süreç stdin'i okumadan çıkarsa yazma SIGPIPE yerine EPIPE alsın; atan write(contentsOf:) hatayı yutar
+        _ = fcntl(inp.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         group.enter()
         DispatchQueue.global().async {
             try? inp.fileHandleForWriting.write(contentsOf: stdin)

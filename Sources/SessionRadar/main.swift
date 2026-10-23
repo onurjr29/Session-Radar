@@ -5,6 +5,9 @@ import ServiceManagement
 import SwiftUI
 import UserNotifications
 
+// soru sorma süreci stdin'i okumadan çıkarsa uygulama SIGPIPE ile ölmesin
+signal(SIGPIPE, SIG_IGN)
+
 let settingsURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude/settings.json")
 
 func fail(_ message: String) -> Never {

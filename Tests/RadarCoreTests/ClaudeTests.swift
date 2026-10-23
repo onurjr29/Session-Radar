@@ -37,3 +37,8 @@ private func executableScript(_ body: String) throws -> URL {
     let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
     await #expect(throws: AskError.failed("boom")) { try await runAsk(prompt: "x", claudePath: fake.path, paths: paths) }
 }
+@Test(.timeLimit(.minutes(1))) func runProcessSurvivesUnreadStdin() {
+    // stdin'i okumadan çıkan süreç: yazma EPIPE alır, SIGPIPE ile çökmemeli ve takılmamalı
+    let r = runProcess("/usr/bin/true", [], stdin: Data(count: 200_000), timeout: 5)
+    #expect(r?.status == 0 && r?.timedOut == false)
+}
