@@ -89,6 +89,10 @@ struct SessionRadarApp: App {
             MenuLabel(store: store)
         }
         .menuBarExtraStyle(.window)
+        Window("Session Radar", id: "sessions") {
+            SessionWindow(store: store)
+        }
+        .defaultSize(width: 980, height: 640)
     }
 }
 

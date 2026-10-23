@@ -34,6 +34,7 @@ extension SessionState {
 struct PanelView: View {
     let store: RadarStore
     @State private var contentHeight: CGFloat = 0
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -62,6 +63,10 @@ struct PanelView: View {
                 Text(error).font(.caption2).foregroundStyle(.red).lineLimit(2)
             }
             HStack {
+                Button("Tüm session'lar") {
+                    openWindow(id: "sessions")
+                    NSApplication.shared.activate()
+                }
                 Spacer()
                 Button("Çık") { NSApplication.shared.terminate(nil) }
             }
@@ -144,7 +149,7 @@ private struct SessionDetail: View {
     }
 }
 
-private struct AskBox: View {
+struct AskBox: View {
     let sessionId: String
     let store: RadarStore
     @State private var question = ""
