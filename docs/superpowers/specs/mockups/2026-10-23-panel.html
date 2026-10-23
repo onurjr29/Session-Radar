@@ -1,0 +1,93 @@
+<h2>Panel C, ikinci hâli: şeritteki noktalara tıkla</h2>
+<p class="subtitle">Bir noktaya tıklayınca yanındaki yazı o konunun başlığına ve durumuna dönüşüyor. Seçili nokta halka ile işaretleniyor.</p>
+
+<style>
+  .pv { --w:#b45309; --wbg:#fdf3e4; --run:#2c64c9; --err:#c03b3b; --ebg:#fbecec; --ok:#3d8b5a; --mute:#8b8b86;
+        --ink:#1f1f1d; --ink2:#5d5d58; --line:#e6e4df; --panel:#fbfaf8; }
+  @media (prefers-color-scheme: dark) {
+    .pv { --w:#f0a44b; --wbg:#3a2c1a; --run:#6f9df0; --err:#ef7b7b; --ebg:#3b2222; --ok:#79c08f; --mute:#8d8d88;
+          --ink:#ecebe7; --ink2:#a9a8a2; --line:#34332f; --panel:#232321; }
+  }
+  .pv { display:flex; justify-content:center; padding:10px 0 30px; }
+  .pv .panel { width:340px; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+        box-shadow:0 10px 30px rgba(0,0,0,.10); font:13px/1.35 -apple-system, BlinkMacSystemFont, system-ui; color:var(--ink); overflow:hidden; }
+  .pv .head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px 8px; }
+  .pv .head span { color:var(--ink2); font-size:12px; }
+  .pv .wait { margin:6px 10px 8px; background:var(--wbg); border-radius:10px; padding:10px 12px; border-left:3px solid var(--w); }
+  .pv .wt { display:flex; align-items:center; gap:7px; font-weight:600; }
+  .pv .q { margin-top:5px; }
+  .pv .meta { color:var(--ink2); font-size:11.5px; }
+  .pv .item { display:flex; align-items:flex-start; gap:9px; padding:8px 14px; }
+  .pv .item + .item { border-top:1px solid var(--line); }
+  .pv .item .dot { margin-top:5px; }
+  .pv .nm { font-weight:500; }
+  .pv .sub { font-size:11.5px; }
+  .pv .grow { flex:1; min-width:0; }
+  .pv .num { font-size:11px; color:var(--ink2); font-variant-numeric:tabular-nums; margin-top:2px; }
+  .pv .foot { display:flex; gap:6px; padding:8px 12px 10px; border-top:1px solid var(--line); }
+  .pv .chip { font-size:11.5px; padding:2px 8px; border-radius:20px; background:var(--line); color:var(--ink2); }
+  .pv .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .pv .track { display:flex; align-items:center; margin-top:7px; }
+  .pv .track .n { width:10px; height:10px; border-radius:50%; border:2px solid var(--mute); background:var(--panel); flex:none; cursor:pointer; box-sizing:border-box; }
+  .pv .track .n.done { background:var(--ok); border-color:var(--ok); }
+  .pv .track .n.open { border-color:var(--w); }
+  .pv .track .n.now { width:12px; height:12px; }
+  .pv .track .n.sel { outline:2px solid var(--ink); outline-offset:2px; }
+  .pv .track .l { height:2px; width:14px; background:var(--line); flex:none; }
+  .pv .track em { font-style:normal; margin-left:10px; font-size:11.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .pv .track em b { color:var(--ink); font-weight:500; }
+</style>
+
+<div class="pv">
+  <div class="panel">
+    <div class="head"><b>Session Radar</b><span>7 session</span></div>
+
+    <div class="wait">
+      <div class="wt"><span class="dot" style="background:var(--w)"></span>backend-worker <span class="meta" style="margin-left:auto">4 dk</span></div>
+      <div class="q">“Migration'ı staging veritabanına uygulayayım mı?”</div>
+      <div class="track">
+        <span class="n done" data-t="<b>Auth token yenileme</b> · kapandı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n open" data-t="<b>Rate limit ayarı</b> · açık kaldı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n now sel" style="border-color:var(--w);background:var(--w)" data-t="<b>Etkinlik tablosu migration'ı</b> · şu anki" onclick="pick(this)"></span>
+        <em><b>Etkinlik tablosu migration'ı</b> · şu anki</em>
+      </div>
+    </div>
+
+    <div class="item"><span class="dot" style="background:var(--err)"></span><div class="grow">
+      <div class="nm">image-service-worker</div><div class="sub" style="color:var(--err)">3 test başarısız</div>
+      <div class="track">
+        <span class="n done" data-t="<b>S3 yükleme hatası</b> · kapandı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n now sel" style="border-color:var(--err);background:var(--err)" data-t="<b>Görsel boyutlandırma</b> · şu anki" onclick="pick(this)"></span>
+        <em><b>Görsel boyutlandırma</b> · şu anki</em>
+      </div></div></div>
+
+    <div class="item"><span class="dot" style="background:var(--run)"></span><div class="grow">
+      <div class="nm">Session Radar</div>
+      <div class="track">
+        <span class="n done" data-t="<b>MVP: menü paneli</b> · kapandı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n done" data-t="<b>Konu geçmişi penceresi</b> · kapandı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n done" data-t="<b>Durum düzeltmeleri</b> · kapandı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n now sel" style="border-color:var(--run);background:var(--run)" data-t="<b>Yeni arayüz tasarımı</b> · şu anki" onclick="pick(this)"></span>
+        <em><b>Yeni arayüz tasarımı</b> · şu anki</em>
+      </div></div><span class="num">2/5</span></div>
+
+    <div class="item"><span class="dot" style="background:var(--run)"></span><div class="grow">
+      <div class="nm">mobile-worker</div>
+      <div class="track">
+        <span class="n open" data-t="<b>Bildirim izinleri</b> · açık kaldı" onclick="pick(this)"></span><span class="l"></span>
+        <span class="n now sel" style="border-color:var(--run);background:var(--run)" data-t="<b>Etkinlik detay ekranı</b> · şu anki" onclick="pick(this)"></span>
+        <em><b>Etkinlik detay ekranı</b> · şu anki</em>
+      </div></div><span class="num">3/4</span></div>
+
+    <div class="foot"><span class="chip">✓ 3 bitti</span><span class="chip">Tüm session'lar ›</span></div>
+  </div>
+</div>
+
+<script>
+  function pick(n) {
+    const t = n.closest('.track');
+    t.querySelectorAll('.n').forEach(x => x.classList.remove('sel'));
+    n.classList.add('sel');
+    t.querySelector('em').innerHTML = n.dataset.t;
+  }
+</script>

@@ -1,0 +1,179 @@
+<h2>B, ikinci hâli: sapaklar, sağda adım listesi ve kamera</h2>
+<p class="subtitle">Tuvali farenle sürükleyebilir, trackpad'de iki parmakla kaydırabilir, ⌘ ile tekerleği çevirerek ya da sıkıştırarak yakınlaştırabilirsin. Sağdaki listede bir adıma tıklayınca kamera o konuya gidiyor. "Liquid Glass araştırması" kartındaki "Kapat" düğmesine bas: o dal ana hatta geri kayıyor.</p>
+
+<style>
+  .w2 { --w:#f08a00; --run:#0a84ff; --err:#ff3b30; --ok:#30a14e; --gray:#8e8e93;
+        --ink:#1d1d1f; --ink2:#6e6e73; --card:#ffffff; --canvas:#f4f4f6; --dots:#d3d3d8; --line:#b8b8be;
+        --glass:rgba(255,255,255,.64); --glassb:rgba(255,255,255,.78); --sep:rgba(0,0,0,.08);
+        font:13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui; color:var(--ink); }
+  @media (prefers-color-scheme: dark) {
+    .w2 { --w:#ff9f0a; --ok:#32d74b; --ink:#f5f5f7; --ink2:#a1a1a6; --card:#2c2c2e; --canvas:#1c1c1e; --dots:#3a3a3c; --line:#5a5a5e;
+          --glass:rgba(44,44,46,.66); --glassb:rgba(255,255,255,.12); --sep:rgba(255,255,255,.1); }
+  }
+  .w2 .wall { border-radius:16px; padding:22px; background:
+      radial-gradient(120% 90% at 10% 0%, #b9d3e6 0%, transparent 60%), radial-gradient(90% 80% at 100% 100%, #d9cdb8 0%, transparent 60%), #c9d6dc; }
+  @media (prefers-color-scheme: dark) { .w2 .wall { background:
+      radial-gradient(120% 90% at 10% 0%, #23384a 0%, transparent 60%), radial-gradient(90% 80% at 100% 100%, #3a3226 0%, transparent 60%), #1b2329; } }
+  .w2 .win { background:var(--canvas); border-radius:14px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2);
+        display:grid; grid-template-columns:200px 1fr 240px; height:560px; position:relative; user-select:none; }
+  .w2 .glass { border-radius:12px; background:var(--glass); backdrop-filter:blur(30px) saturate(170%); -webkit-backdrop-filter:blur(30px) saturate(170%); border:.5px solid var(--glassb); }
+  .w2 .side { margin:8px; padding:34px 8px 8px; position:relative; z-index:4; }
+  .w2 .lights { position:absolute; top:12px; left:12px; display:flex; gap:7px; }
+  .w2 .lights i { width:11px; height:11px; border-radius:50%; background:#ff5f57; } .w2 .lights i:nth-child(2){background:#febc2e} .w2 .lights i:nth-child(3){background:#28c840}
+  .w2 .sh { font-size:11px; font-weight:600; color:var(--ink2); padding:8px 8px 4px; }
+  .w2 .srow { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; }
+  .w2 .srow.sel { background:rgba(10,132,255,.14); }
+  .w2 .srow .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .w2 .srow small { color:var(--ink2); font-size:11px; }
+  .w2 .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .w2 .board { position:relative; overflow:hidden; cursor:grab; margin:0 -8px; background-color:var(--canvas);
+        background-image:radial-gradient(var(--dots) 1.1px, transparent 1.3px); }
+  .w2 .board.drag { cursor:grabbing; }
+  .w2 .world { position:absolute; left:0; top:0; transform-origin:0 0; }
+  .w2 .world.anim { transition:transform .5s cubic-bezier(.3,.7,.2,1); }
+  .w2 .card { position:absolute; width:180px; box-sizing:border-box; background:var(--card); border-radius:14px; padding:10px 12px;
+        box-shadow:0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.07); border:.5px solid var(--sep); cursor:pointer;
+        transition:left .6s cubic-bezier(.3,.7,.2,1), top .6s cubic-bezier(.3,.7,.2,1), box-shadow .2s; }
+  .w2 .card.now { box-shadow:0 0 0 2px var(--run), 0 8px 24px rgba(10,132,255,.2); }
+  .w2 .card.sel { box-shadow:0 0 0 2px var(--ink2), 0 6px 18px rgba(0,0,0,.12); }
+  .w2 .card.now.sel { box-shadow:0 0 0 2px var(--run), 0 0 0 5px rgba(10,132,255,.25); }
+  .w2 .ch { display:flex; align-items:center; gap:8px; }
+  .w2 .ic { width:20px; height:20px; border-radius:6px; display:grid; place-items:center; color:#fff; font-size:11px; font-weight:700; flex:none; }
+  .w2 .ct { font-weight:600; flex:1; min-width:0; font-size:12.5px; }
+  .w2 .cm { color:var(--ink2); font-size:11px; margin-top:5px; display:flex; align-items:center; gap:6px; }
+  .w2 .cap { font-size:10px; padding:1px 7px; border-radius:10px; font-weight:500; white-space:nowrap; }
+  .w2 .btn { margin-left:auto; font-size:10.5px; padding:2px 8px; border-radius:10px; background:var(--run); color:#fff; cursor:pointer; }
+  .w2 svg.wires { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+  .w2 svg.wires path { transition:d .6s cubic-bezier(.3,.7,.2,1); }
+  .w2 .hud { position:absolute; display:flex; gap:2px; padding:3px; border-radius:16px; z-index:3; font-size:12px; color:var(--ink2); }
+  .w2 .hud span { padding:2px 9px; border-radius:12px; cursor:pointer; }
+  .w2 .hud span:hover { background:rgba(127,127,127,.15); }
+  .w2 .steps { margin:8px; padding:12px 6px 8px; z-index:4; overflow:auto; }
+  .w2 .steps h5 { margin:0 8px 8px; font-size:11px; color:var(--ink2); font-weight:600; }
+  .w2 .st { padding:7px 8px; border-radius:8px; cursor:pointer; }
+  .w2 .st:hover { background:rgba(127,127,127,.1); }
+  .w2 .st.sel { background:rgba(10,132,255,.14); }
+  .w2 .st .r { display:flex; align-items:center; gap:8px; }
+  .w2 .st .n { font-variant-numeric:tabular-nums; color:var(--ink2); font-size:11px; width:14px; text-align:right; }
+  .w2 .st .x { display:none; color:var(--ink2); font-size:11.5px; margin:5px 0 0 22px; }
+  .w2 .st.sel .x { display:block; }
+  .w2 .st.branch .n::after { content:"↳"; margin-left:1px; }
+</style>
+
+<div class="w2"><div class="wall"><div class="win">
+  <div class="side glass">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="sh">Seni bekliyor</div>
+    <div class="srow"><span class="dot" style="background:var(--w)"></span><span class="t">backend-worker</span><small>4 dk</small></div>
+    <div class="sh">Çalışıyor</div>
+    <div class="srow sel"><span class="dot" style="background:var(--run)"></span><span class="t">Session Radar</span><small>2/5</small></div>
+    <div class="srow"><span class="dot" style="background:var(--run)"></span><span class="t">mobile-worker</span><small>3/4</small></div>
+    <div class="sh">Bitti</div>
+    <div class="srow"><span class="dot" style="background:var(--gray)"></span><span class="t">iOS canlıya alma</span></div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="world" id="world"><svg class="wires" id="wires" width="1" height="1"></svg></div>
+    <div class="hud glass" style="right:16px; bottom:12px"><span onclick="zoomBy(1/1.2)">−</span><span id="zl" onclick="fitAll()">100%</span><span onclick="zoomBy(1.2)">+</span></div>
+    <div class="hud glass" style="left:16px; bottom:12px"><span onclick="focusNow()">● Şu ana dön</span></div>
+  </div>
+
+  <div class="steps glass" id="steps"><h5>ADIMLAR</h5></div>
+</div></div></div>
+
+<script>
+(() => {
+  const C = { done:'var(--ok)', open:'var(--w)', active:'var(--run)' };
+  const L = { done:'Kapandı', open:'Açık kaldı', active:'Şu an' };
+  const G = { done:'✓', open:'!', active:'●' };
+  // from: konu başka bir konunun ortasında ondan sapılarak açıldıysa o konunun id'si
+  const T = [
+    { id:1, t:'MVP: menü paneli', s:'done', from:null, n:14, at:'09:12', sum:'Hook kurulumu, durum makinesi ve menü paneli yapıldı.' },
+    { id:2, t:'Anıl ile paylaşım', s:'open', from:1, n:4, at:'09:40', sum:'Supabase ile paylaşım konuşuldu, sonraya bırakıldı.' },
+    { id:3, t:'Boş panel hatası', s:'done', from:1, n:3, at:'10:55', sum:'Panel yüksekliği sıfıra çöküyordu, düzeltildi.' },
+    { id:4, t:'Konu geçmişi penceresi', s:'done', from:null, n:9, at:'11:40', sum:'Konular Haiku ile gruplanıp ayrı pencerede gösterildi.' },
+    { id:5, t:'Elle kontrol listesi', s:'open', from:4, n:1, at:'14:05', sum:'Pencere, bildirimler ve /clear davranışı elle denenecek.' },
+    { id:6, t:'Durum düzeltmeleri', s:'done', from:null, n:3, at:'15:10', sum:'Arka plan session’ı, Esc/red, pid kontrolü düzeltildi.' },
+    { id:7, t:'Yeni arayüz tasarımı', s:'open', from:null, n:6, at:'16:02', sum:'Panel ve flow penceresi Apple çizgisinde tasarlanıyor.' },
+    { id:8, t:'Liquid Glass araştırması', s:'active', from:7, n:2, at:'16:30', sum:'Apple’ın yeni tasarım dili ve SwiftUI API’leri inceleniyor.' },
+  ];
+  const W = 180, H = 62, STEP = 225, LANE = 118, X0 = 60, Y0 = 220;
+  const board = document.getElementById('board'), world = document.getElementById('world'), wires = document.getElementById('wires');
+  const steps = document.getElementById('steps');
+  let cam = { x:0, y:0, s:1 }, sel = 8, cards = {};
+
+  // ana hat: sapağı olmayanlar ve kapanıp geri dönenler; açık ya da süren sapaklar yukarı/aşağı dallanır
+  function layout() {
+    let k = 0;
+    T.forEach((t, i) => {
+      t.x = X0 + i * STEP;
+      const off = t.from !== null && t.s !== 'done';
+      t.y = off ? Y0 + (k++ % 2 === 0 ? -LANE : LANE) : Y0;
+    });
+  }
+  function curve(a, b) { // a'nın sağından b'nin soluna yumuşak geçiş
+    const x1 = a.x + W, y1 = a.y + H/2, x2 = b.x, y2 = b.y + H/2, m = (x1 + x2) / 2;
+    return `M${x1} ${y1} C${m} ${y1} ${m} ${y2} ${x2} ${y2}`;
+  }
+  function draw() {
+    layout();
+    const main = T.filter(t => t.y === Y0);
+    let p = '';
+    for (let i = 1; i < main.length; i++) p += `<path d="${curve(main[i-1], main[i])}" stroke="var(--line)" stroke-width="2" fill="none"/>`;
+    T.filter(t => t.y !== Y0).forEach(t => {
+      const parent = T.find(q => q.id === t.from);
+      p += `<path d="${curve(parent, t)}" stroke="${C[t.s]}" stroke-width="2" fill="none" opacity=".7"/>`;
+      if (t.s === 'open') p += `<circle cx="${t.x + W + 14}" cy="${t.y + H/2}" r="3.5" fill="none" stroke="${C.open}" stroke-width="1.5"/><path d="M${t.x+W} ${t.y+H/2} H${t.x+W+10}" stroke="${C.open}" stroke-width="2" stroke-dasharray="3 3"/>`;
+      if (t.s === 'active') p += `<path d="M${t.x+W} ${t.y+H/2} h40" stroke="${C.active}" stroke-width="2" stroke-dasharray="4 4" fill="none"/>`;
+    });
+    wires.innerHTML = p;
+    T.forEach(t => {
+      let el = cards[t.id];
+      if (!el) { el = cards[t.id] = document.createElement('div'); el.className = 'card'; world.appendChild(el);
+                 el.addEventListener('pointerdown', e => e.stopPropagation());
+                 el.addEventListener('click', () => select(t.id, false)); }
+      el.style.left = t.x + 'px'; el.style.top = t.y + 'px';
+      el.classList.toggle('now', t.s === 'active'); el.classList.toggle('sel', t.id === sel);
+      el.innerHTML = `<div class="ch"><div class="ic" style="background:${C[t.s]}">${G[t.s]}</div><div class="ct">${t.t}</div></div>
+        <div class="cm"><span class="cap" style="background:color-mix(in srgb, ${C[t.s]} 15%, transparent);color:${C[t.s]}">${L[t.s]}</span>${t.n} istek
+        ${t.s === 'active' && t.from !== null ? '<span class="btn" onclick="event.stopPropagation(); closeTopic(' + t.id + ')">Kapat</span>' : ''}</div>`;
+    });
+    steps.innerHTML = '<h5>ADIMLAR</h5>' + T.map((t, i) => `
+      <div class="st ${t.id === sel ? 'sel' : ''} ${t.y !== Y0 ? 'branch' : ''}" onclick="selectStep(${t.id})">
+        <div class="r"><span class="n">${i + 1}</span><span class="dot" style="background:${C[t.s]}"></span><span>${t.t}</span></div>
+        <div class="x">${L[t.s]} · ${t.at} · ${t.n} istek<br>${t.sum}</div></div>`).join('');
+  }
+  function apply(anim) {
+    world.classList.toggle('anim', !!anim);
+    world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
+    board.style.backgroundSize = `${18 * cam.s}px ${18 * cam.s}px`;
+    board.style.backgroundPosition = `${cam.x}px ${cam.y}px`;
+    document.getElementById('zl').textContent = Math.round(cam.s * 100) + '%';
+  }
+  function focus(id) {
+    const t = T.find(q => q.id === id), r = board.getBoundingClientRect();
+    cam.x = r.width / 2 - (t.x + W / 2) * cam.s; cam.y = r.height / 2 - (t.y + H / 2) * cam.s; apply(true);
+  }
+  function select(id, move) { sel = id; draw(); if (move) focus(id); }
+  window.selectStep = id => select(id, true);
+  window.focusNow = () => { const a = T.find(t => t.s === 'active') || T[T.length - 1]; select(a.id, true); };
+  window.zoomBy = f => { const r = board.getBoundingClientRect(), cx = r.width/2, cy = r.height/2;
+    const s = Math.min(2, Math.max(.4, cam.s * f)); cam.x = cx - (cx - cam.x) * s / cam.s; cam.y = cy - (cy - cam.y) * s / cam.s; cam.s = s; apply(true); };
+  window.fitAll = () => { cam.s = .55; const r = board.getBoundingClientRect();
+    cam.x = (r.width - (X0 * 2 + (T.length - 1) * STEP + W) * cam.s) / 2; cam.y = r.height / 2 - (Y0 + H / 2) * cam.s; apply(true); };
+  window.closeTopic = id => { const t = T.find(q => q.id === id); t.s = 'done';
+    const p = T.find(q => q.id === t.from); if (p) p.s = 'active'; sel = p ? p.id : sel; draw(); };
+
+  let drag = null;
+  board.addEventListener('pointerdown', e => { drag = { x:e.clientX, y:e.clientY, cx:cam.x, cy:cam.y }; board.classList.add('drag'); board.setPointerCapture(e.pointerId); });
+  board.addEventListener('pointermove', e => { if (!drag) return; cam.x = drag.cx + e.clientX - drag.x; cam.y = drag.cy + e.clientY - drag.y; apply(false); });
+  board.addEventListener('pointerup', () => { drag = null; board.classList.remove('drag'); });
+  board.addEventListener('wheel', e => { e.preventDefault();
+    if (e.ctrlKey || e.metaKey) { const r = board.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      const s = Math.min(2, Math.max(.4, cam.s * Math.exp(-e.deltaY * .01))); cam.x = px - (px - cam.x) * s / cam.s; cam.y = py - (py - cam.y) * s / cam.s; cam.s = s; }
+    else { cam.x -= e.deltaX; cam.y -= e.deltaY; }
+    apply(false); }, { passive:false });
+
+  draw(); requestAnimationFrame(() => { focus(8); });
+})();
+</script>
