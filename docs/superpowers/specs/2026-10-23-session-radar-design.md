@@ -25,6 +25,10 @@ Bunların bildirim olarak gelmesi isteniyor.
    - ilerleme (ör. 3/7),
    - son güncellemeden bu yana geçen süre.
 4. **Detay görünümü:** neden yapıldığı, aşama, sıradaki adım, kalan işler (checklist) ve sorunlar.
+   - **Konu akışı (Onur'un isteği, 2026-10-23):** Session'lar ilerledikçe konu değiştiriyor. Detay görünümü, session'ın başladığı konudan şu ana kadar geçtiği konuları sırayla bir akış olarak gösterir.
+   - Her konu için durum belirtilir: şu anki / açık (yarım kaldı, dönülecek) / kapandı.
+   - Satırda şu anki konu ve açık kalan konu sayısı görünür.
+   - Konu listesini session'ın kendisi tutar *(Claude'un kararı)*.
 5. **Soru sor:** Kendi session'larımdan birini seçip serbest metin bir soru sorarım ("ne yapıyordun, neden?"). Cevabı, o session'ın kaydını ve durum dosyasını okuyan ayrı bir Claude çağrısı verir. Session'ın kendisi bölünmez, ona mesaj gitmez.
 6. **macOS bildirimleri** şu durumlarda gelir:
    - bir session soru sorduğunda ya da izin istediğinde,
@@ -38,10 +42,10 @@ Bunların bildirim olarak gelmesi isteniyor.
 
 | Durum | Ne zaman | Simgedeki sayıya dahil mi | Bildirim |
 |---|---|---|---|
-| **çalışıyor** | `UserPromptSubmit` ile `Stop` arasında (Claude bir tur üzerinde çalışırken) | hayır | yok |
+| **çalışıyor** | `UserPromptSubmit` ile `Stop` arasında (Claude bir tur üzerinde çalışırken); ayrıca `Stop` geldiğinde `background_tasks` boş değilse, yani session arka plandaki bir işi bekliyorsa | hayır | yok |
 | **seni bekliyor** | Bekleyen bir izin, elicitation ya da `agent_needs_input` olduğunda; veya `Stop` sonrasında son asistan mesajı kullanıcıya bir soru sorduğunda | **evet** | bir kez, durum başladığında |
 | **tur bitti** | `Stop` geldiğinde ve soru olmadığında. Sıra kullanıcıdadır ama cevap beklenmiyordur. Tüm görevin bitip bitmediğini satırdaki checklist ilerlemesi gösterir. | hayır | her `Stop`'ta bir kez ("X işini bitirdi") |
-| **sorun var** | Session durum dosyasına bir sorun yazdığında; session süreci `SessionEnd` olmadan öldüğünde; ya da kullanım limiti nedeniyle durakladığında (`quota_auto_resume_*` bildirimleri) | evet | bir kez |
+| **sorun var** | Session durum dosyasına bir sorun yazdığında; session süreci çalışırken `SessionEnd` olmadan öldüğünde (boştayken kaybolan session "kapandı" sayılır); bir tur API hatası ya da rate limit nedeniyle bittiğinde (`StopFailure`); ya da kullanım limiti nedeniyle durakladığında (`quota_auto_resume_stale` / `quota_auto_resume_disabled`) | evet | bir kez |
 | **kapandı** | `SessionEnd` geldiğinde veya session `claude agents --json` listesinden düştüğünde | hayır | yok |
 
 - Kullanıcı session'a yeni bir mesaj yazınca, yani yeni bir `UserPromptSubmit` gelince, "seni bekliyor" ve "tur bitti" durumları kendiliğinden sona erer.
@@ -97,7 +101,8 @@ Bunların bildirim olarak gelmesi isteniyor.
    - `last-prompt` (`lastPrompt`): kullanıcının son verdiği görev.
    - `user` ve `assistant` satırları: `message`, `timestamp`, `gitBranch`, `cwd`. Asistan mesajlarındaki `tool_use` blokları son eylemi verir (tool adı ve dosya yolu ya da komut).
 4. **Hook'lar:** Belgelenmiş ve en canlı sinyal.
-   - Kullanılacak olaylar: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `SessionEnd`.
+   - Kullanılacak olaylar: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `StopFailure`, `SessionEnd`.
+   - `Stop` olayının girdisinde `last_assistant_message` (Claude'un son mesajı) ve `background_tasks` alanları var. `StopFailure` olayında ise `error` alanı var (ör. `rate_limit`).
    - Her hook stdin'den `session_id`, `transcript_path`, `cwd` ve olaya özgü alanları alır.
    - `Notification` olayının `notification_type` alanı şu değerleri alabilir:
      - `permission_prompt`: izin bekleniyor, yaklaşık 6 saniye sonra tetiklenir.
@@ -107,11 +112,12 @@ Bunların bildirim olarak gelmesi isteniyor.
      - `agent_completed`
    - Hook komutu olayı yalnızca yerel, append-only bir olay günlüğüne yazar. Uygulama bu günlüğü izler.
    - "Seni bekliyor" durumu bekleyen bir izin, elicitation veya `agent_needs_input` demektir. Bunun yanında `Stop` sonrasında son asistan mesajı kullanıcıya bir soruyla bitiyorsa da bu durum gösterilir. Bunun ayrıntılı kuralı builder'a bırakıldı.
-5. **Session durum dosyası (yeni):** Global bir kural dosyası (`~/.claude/rules/session-radar.md`) her session'a kendi durumunu kısa ve yapılandırılmış biçimde yazmasını söyler.
-   - Bu makinede `~/.claude/rules/` altındaki dosyalar global talimat olarak yükleniyor. Böylece mevcut CLAUDE.md'ye dokunulmaz.
-   - Session kendini `CLAUDE_CODE_SESSION_ID` ortam değişkeniyle tanır. Bu değişkenin session'ın Bash tool'unda mevcut olduğu doğrulandı.
-   - İçerik: görev, neden, aşama, sıradaki adım, checklist (`[{text, done}]`) ve sorunlar.
-   - Yazma yolu, session'a en az token yükü bindirecek şekilde seçilmeli: küçük bir CLI ya da doğrudan dosya yazımı (builder'ın kararı).
+5. **Session durum dosyası (yeni):** Her session'a kendi durumunu kısa ve yapılandırılmış biçimde yazması söylenir.
+   - **Talimat nasıl verilir:** Talimatı `SessionStart` hook'u verir. Claude Code, bu hook'un stdout çıktısını session'ın bağlamına ekliyor. Hook çıktısı, o session'a özel durum dosyasının mutlak yolunu da (`~/.session-radar/status/<session_id>.json`) içerir. Hook her başlangıçta, devam ettirmede, `/clear`'da ve compaction'da çalıştığı için talimat compaction'dan sonra da kaybolmaz. *(Claude'un kararı, 2026-10-23. İlk düşünülen `~/.claude/rules/` kural dosyasının yerini aldı. Kural dosyasında session kendi kimliğini öğrenmek için Bash çalıştırmak zorunda kalıyordu, bu da izin sorusu çıkarabiliyordu.)*
+   - **Nasıl yazılır:** Session dosyayı Write tool'uyla yazar. İzin sorusu çıkmaması için kurulum `permissions.allow` listesine `Edit(~/.session-radar/status/**)` ve `Read(~/.session-radar/status/**)` kurallarını ekler. Claude Code, Write tool'u için `Edit` kurallarına bakıyor.
+   - İçerik: görev, neden, aşama, sıradaki adım, checklist (`[{text, done}]`), sorunlar ve konu listesi.
+   - Konu listesi `[{title, state}]` biçimindedir, eskiden yeniye sıralanır. `state` değeri `active` (tek bir tane olur), `open` ya da `done` olabilir.
+   - Session dosyayı güncellemeden önce okur ve eski konuları korur.
    - Session ne zaman güncelleme yapar: görev başında, aşama değişince, iş bitince ve sorun çıkınca.
    - Durum dosyası yoksa yedek değerler kullanılır: başlık `aiTitle`'dan, görev `lastPrompt`'un kısaltmasından gelir ve aşama "bilinmiyor" olarak gösterilir.
 6. **Değişen dosyalar (çakışma tespiti için):**
@@ -149,6 +155,7 @@ Bunların bildirim olarak gelmesi isteniyor.
 - API kredisi kullanılmaz, her şey abonelik üzerinden yürür.
 - Paylaşım şimdilik Supabase ücretsiz planıyla yapılır. Tailscale daha sonra ek bir seçenek olarak gelir.
 - Özetleri session'lar kendileri yazar. Haiku yalnızca kullanıcı soru sorduğunda kullanılır.
+- Her session'ın konu akışı görünür: şu anki konu, önceki konular ve bunların açık mı kapalı mı olduğu.
 - Proje klasörü: `~/Desktop/Projeler/session-radar`.
 - **Aşamalar (2026-10-23):**
   - **Bu aşama:** Yalnızca Onur'un kendi kullanımı. Kapsamda 1–7 numaralı hedefler var: yerel veri, panel, bildirimler, soru sorma ve Onur'un kendi session'ları arasındaki çakışma uyarısı.
@@ -160,7 +167,7 @@ Bunların bildirim olarak gelmesi isteniyor.
 - Görsel tasarım ve panel düzeni.
 - "Seni bekliyor" tespitinin ayrıntılı kuralı.
 - Olay günlüğünün formatı ve dosya izleme yöntemi.
-- Durum dosyasının yazılma yolu (CLI veya doğrudan) ve kural metninin tam ifadesi.
+- Talimat metninin tam ifadesi.
 - Supabase şemasının ayrıntıları ve bayat satır temizliği.
-- Kurulum akışı (hook birleştirme, kural dosyası, oturum açılışında başlatma, Supabase girişi) ve Anıl için kurulum talimatı.
+- Kurulum akışı (hook ve izin kurallarının birleştirilmesi, oturum açılışında başlatma, Supabase girişi) ve Anıl için kurulum talimatı.
 - Test yaklaşımı.
