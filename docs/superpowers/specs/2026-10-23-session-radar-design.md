@@ -150,7 +150,10 @@ Bunların bildirim olarak gelmesi isteniyor.
 - Paylaşım şimdilik Supabase ücretsiz planıyla yapılır. Tailscale daha sonra ek bir seçenek olarak gelir.
 - Özetleri session'lar kendileri yazar. Haiku yalnızca kullanıcı soru sorduğunda kullanılır.
 - Proje klasörü: `~/Desktop/Projeler/session-radar`.
-- Yapım sırası: önce kişisel kısım (yerel veri, panel, bildirimler), sonra paylaşım. İkisi aynı planda yer alır.
+- **Aşamalar (2026-10-23):**
+  - **Bu aşama:** Yalnızca Onur'un kendi kullanımı. Kapsamda 1–7 numaralı hedefler var: yerel veri, panel, bildirimler, soru sorma ve Onur'un kendi session'ları arasındaki çakışma uyarısı.
+  - **Sonraki aşama:** Paylaşım (8. hedef, Supabase) ve Anıl entegrasyonu ayrı bir plan olarak ele alınacak. Anıl'ın kurulumu da o aşamada doğrulanacak: Claude Code sürümü, giriş yöntemi (abonelik mi API anahtarı mı) ve macOS sürümü.
+  - Bu aşamada Supabase'e hiçbir şey yazılmaz. Paylaşım kodu, sonraki aşamada tek bir modül olarak eklenebilecek şekilde yer bırakılır.
 
 ## Builder'a bırakılanlar
 
