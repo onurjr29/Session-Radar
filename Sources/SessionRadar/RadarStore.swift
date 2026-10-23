@@ -204,11 +204,14 @@ private actor Engine {
         var kept: [SessionSnapshot] = []
         for c in list {
             let info = transcript(c.id, hint: c.activity?.transcriptPath)
-            let snap = buildSnapshot(SessionInputs(
+            var inputs = SessionInputs(
                 sessionId: c.id, agent: c.agent, registry: c.registry, alive: c.alive, seenAlive: c.seenAlive,
                 activity: c.activity, status: status(c.id),
-                transcript: info, repo: repos[c.cwd], lastSeen: now, topics: history(c.id).topics))
-            if shouldKeep(snap, alive: c.alive, now: now) { kept.append(snap) }
+                transcript: info, repo: repos[c.cwd], lastSeen: now)
+            // gizli session'ların istek geçmişi okunmaz; tutulma kararı konulara bağlı değil
+            guard shouldKeep(buildSnapshot(inputs), alive: c.alive, now: now) else { continue }
+            inputs.topics = history(c.id).topics
+            kept.append(buildSnapshot(inputs))
         }
         let ids = Set(list.map(\.id))
         statuses = statuses.filter { ids.contains($0.key) }
@@ -309,15 +312,17 @@ private actor Engine {
         if let t = transcripts[sid], t.path != h.path || t.mtime != h.mtime {
             if t.path != h.path { h.cursor = HistoryCursor(); h.requests = [] }
             let r = readRequests(URL(fileURLWithPath: t.path), from: h.cursor)
-            if r.truncated {
-                // dosya küçüldü: konular silinir, baştan gruplanır
-                h.requests = []; h.topics = []; h.grouped = 0; h.job = nil
-                try? FileManager.default.removeItem(at: paths.topicFile(sid))
-            }
+            if r.truncated { h.requests = [] }
             if let reply = r.trailingReply, !h.requests.isEmpty { h.requests[h.requests.count - 1].reply = reply }
             h.requests += r.requests
             if !r.requests.isEmpty { h.failures = 0 }
             h.cursor = r.cursor; h.path = t.path; h.mtime = t.mtime
+            // dosya küçüldüyse ya da uygulama kapalıyken yeniden yazıldıysa (istek sayısı gruplanandan az):
+            // konular silinir, baştan gruplanır
+            if r.truncated || h.requests.count < h.grouped {
+                h.topics = []; h.grouped = 0; h.job = nil
+                try? FileManager.default.removeItem(at: paths.topicFile(sid))
+            }
         }
         histories[sid] = h
         return h

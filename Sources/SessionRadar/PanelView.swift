@@ -107,7 +107,8 @@ private struct SessionRow: View {
                 if let task = s.task { Text(task).font(.callout).lineLimit(1) }
                 // Bash eylemi uzun ya da çok satırlı olabilir
                 if let action = s.action { Text(action).font(.caption.monospaced()).lineLimit(1) }
-                if let current = s.currentTopic {
+                // konu yoksa son istek zaten görev satırında
+                if let current = s.currentTopic, current != s.task {
                     Text("Konu: " + current + (s.openTopics > 0 ? " · \(s.openTopics) açık konu" : ""))
                         .font(.caption).lineLimit(1)
                 }

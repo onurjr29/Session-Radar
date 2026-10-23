@@ -59,6 +59,18 @@ public func chunkRequests(_ requests: [Request], maxChars: Int = 30_000) -> [[Re
     return chunks
 }
 
+/// Konunun gerçek istek numaraları; ardışık 3+ numara aralık olur: [1,2,13…20] → "#1,#2,#13-#20"
+private func requestNumbers(_ nums: [Int]) -> String {
+    var parts: [String] = [], run: [Int] = []
+    func flush() { parts += run.count >= 3 ? ["#\(run[0])-#\(run[run.count - 1])"] : run.map { "#\($0)" }; run = [] }
+    for n in Set(nums).sorted() {
+        if let last = run.last, n != last + 1 { flush() }
+        run.append(n)
+    }
+    flush()
+    return parts.isEmpty ? "-" : parts.joined(separator: ",")
+}
+
 public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")
@@ -66,8 +78,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     fmt.dateFormat = "HH:mm"
 
     let topicLines = existing.isEmpty ? "(yok)" : existing.map { t in
-        let range = (t.requests.min().map { lo in "#\(lo)-#\(t.requests.max() ?? lo)" }) ?? "-"
-        return "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(range) | özet: \(t.summary)"
+        "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(requestNumbers(t.requests)) | özet: \(t.summary)"
     }.joined(separator: "\n")
 
     let reqLines = requests.map { r in

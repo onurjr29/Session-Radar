@@ -39,6 +39,12 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     let p = buildTopicPrompt(existing: [], requests: [Request(index: 7, text: String(repeating: "a", count: 900), at: nil, reply: String(repeating: "b", count: 900))])
     #expect(p.contains("\"assign\"") && p.contains("#7") && !p.contains(String(repeating: "a", count: 501)) && !p.contains(String(repeating: "b", count: 301)))
 }
+@Test func promptListsRealRequestNumbersOfInterleavedTopics() {
+    let existing = [Topic(id: 1, title: "A", state: "open", summary: "", requests: [1, 2] + Array(13...20)),
+                    Topic(id: 2, title: "B", state: "active", summary: "", requests: [3, 4, 5, 6, 12, 21])]
+    let p = buildTopicPrompt(existing: existing, requests: [req(22)])
+    #expect(p.contains("istekler: #1,#2,#13-#20 |") && p.contains("istekler: #3-#6,#12,#21 |"))
+}
 @Test func topicFileRoundTripsWithPrivatePermissions() throws {
     let url = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".json")
     let f = TopicFile(sessionId: "s", grouped: 2, topics: [Topic(id: 1, title: "A", state: "active", summary: "", requests: [1, 2])], updatedAt: Date(timeIntervalSince1970: 1))

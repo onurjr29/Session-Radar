@@ -42,6 +42,8 @@ struct SessionWindow: View {
         }
         .onAppear(perform: ensureSelection)
         .onChange(of: store.sessions.map(\.id)) { ensureSelection() }
+        // pencere kapalıyken seçim gruplama kuyruğunda öncelik almasın
+        .onDisappear { store.selectedSessionId = nil }
     }
 
     // seçim yoksa ya da session kapanıp listeden düştüyse ilkini seç
