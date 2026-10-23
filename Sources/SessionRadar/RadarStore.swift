@@ -66,7 +66,7 @@ import UserNotifications
         guard let claude = await claude() else { return "claude bulunamadı" }
         let (status, dialogue) = await engine.askContext(sessionId)
         do {
-            return try await runAsk(prompt: buildAskPrompt(question: question, status: status, dialogue: dialogue),
+            return try await runAsk(prompt: buildAskPrompt(question: question, status: status, topics: histories[sessionId]?.topics ?? [], dialogue: dialogue),
                                     claudePath: claude, paths: paths)
         } catch AskError.failed(let m) {
             return "Cevap alınamadı: \(m)"

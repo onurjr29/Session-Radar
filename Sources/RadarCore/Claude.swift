@@ -83,13 +83,14 @@ func dataBlock(_ s: String) -> String {
     return "<veri>\n\(safe)\n</veri>"
 }
 
-public func buildAskPrompt(question: String, status: SessionStatus?, dialogue: [String], maxDialogueChars: Int = 20_000) -> String {
+public func buildAskPrompt(question: String, status: SessionStatus?, topics: [Topic] = [], dialogue: [String], maxDialogueChars: Int = 20_000) -> String {
     var statusText = "yok"
     if let status {
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         if let d = try? enc.encode(status) { statusText = String(decoding: d, as: UTF8.self) }
     }
+    let topicText = topics.isEmpty ? "(yok)" : topics.map { "- \($0.title) | durum: \($0.state) | özet: \($0.summary)" }.joined(separator: "\n")
     // en yeni satırlardan geriye doğru topla, bütçeyi aşan eskileri at
     var kept: [String] = []
     var total = 0
@@ -99,11 +100,14 @@ public func buildAskPrompt(question: String, status: SessionStatus?, dialogue: [
         kept.insert(line, at: 0)
     }
     return """
-    Aşağıda bir Claude Code session'ı hakkında bilgiler var. Kullanıcının sorusunu yalnızca bu bilgilere dayanarak Türkçe ve kısa (en fazla 5 cümle) cevapla. Bilgi yoksa bilmediğini söyle.
+    Aşağıda bir Claude Code session'ı hakkında bilgiler var. Kullanıcının sorusunu yalnızca bu bilgilere dayanarak Türkçe ve kısa (en fazla 5 cümle) cevapla. Bilgi yoksa bilmediğini söyle. Konular session'ın tamamını özetler; son konuşma yalnızca son kısmı gösterir.
     \(dataNotice)
 
     ## Durum dosyası
     \(dataBlock(statusText))
+
+    ## Konular (eskiden yeniye)
+    \(dataBlock(topicText))
 
     ## Son konuşma (eskiden yeniye)
     \(dataBlock(kept.joined(separator: "\n")))

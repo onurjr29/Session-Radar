@@ -14,8 +14,8 @@ public struct Topic: Codable, Equatable, Sendable {
 }
 
 public struct TopicFile: Codable, Equatable, Sendable {
-    /// istek numaralandırması değişince artar; eşleşmeyen dosya yok sayılır ve session baştan gruplanır
-    public static let currentVersion = 2
+    /// istek numaralandırması ya da durum kuralları değişince artar; eşleşmeyen dosya yok sayılır ve session baştan gruplanır
+    public static let currentVersion = 3
     public var version = TopicFile.currentVersion
     public var sessionId: String
     public var grouped: Int
@@ -107,7 +107,9 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     - Mevcut tüm konuları gerektiği gibi güncelleyerek döndür. Yeni bir konu gerekirse id değerini mevcut en büyük id'den büyük ver.
     - Her yeni istek numarasını "assign" içinde tam olarak bir konuya ata (anahtar istek numarası, değer konu id'si). Eski istekleri assign'a yazma.
     - Başlıklar en fazla 6 kelime, özetler en fazla 3 cümle olsun ve Türkçe yazılsın.
-    - Bir konunun işi bitmişse "done", yarım kalıp sonra dönülecekse "open" olarak işaretle.
+    - Bir konunun işi bitmişse "done" yap. Claude işi bitirdiğini ya da düzelttiğini bildirdikten sonra kullanıcı itiraz etmeden başka konuya geçtiyse konu bitmiş sayılır.
+    - "open" yalnızca açıkça yarım kalan, bir şey bekleyen ya da sonra dönüleceği söylenen iş içindir.
+    - Mevcut "open" konuları yeni isteklere göre yeniden değerlendir; sonradan bittiği anlaşılıyorsa "done" yap.
     - "from": konu başka bir konu bitmeden ondan sapılarak açıldıysa o konunun id'si; önceki iş bittikten sonra ya da ana iş olarak başladıysa null. Mevcut from değerlerini gerekmedikçe değiştirme. Sapak konunun işi bittiyse ya da ana konuya bağlandıysa onu "done" yap.
     - Başlıklar gereksiz yere değiştirilmesin.
     - \(dataNotice)

@@ -76,6 +76,10 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(loadTopicFile(url) == f)
     #expect((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int) == 0o600)
 }
+@Test func topicPromptHasDoneAndReevaluateRules() {
+    let p = buildTopicPrompt(existing: [], requests: [req(1)])
+    #expect(p.contains("itiraz etmeden başka konuya geçtiyse") && p.contains("yeniden değerlendir"))
+}
 @Test func topicFileWithOtherVersionIsIgnored() throws {
     let dir = FileManager.default.temporaryDirectory
     func load(_ version: String) throws -> TopicFile? {
@@ -85,7 +89,8 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     }
     #expect(try load("") == nil)
     #expect(try load(#""version":1,"#) == nil)
-    #expect(try load(#""version":2,"#)?.grouped == 1)
+    #expect(try load(#""version":2,"#) == nil)
+    #expect(try load(#""version":3,"#)?.grouped == 1)
 }
 
 func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false, failures: Int = 0) -> GroupingCandidate {
