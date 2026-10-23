@@ -2,128 +2,274 @@ import AppKit
 import RadarCore
 import SwiftUI
 
-@MainActor private let relativeFormatter: RelativeDateTimeFormatter = {
-    let f = RelativeDateTimeFormatter()
-    f.locale = Locale(identifier: "tr_TR")
-    f.unitsStyle = .short
-    return f
-}()
-
 struct PanelView: View {
     let store: RadarStore
-    @State private var contentHeight: CGFloat = 0
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Session Radar").font(.headline)
-            ForEach(store.conflicts, id: \.pairKey) { c in
-                Text("Çakışma: " + name(c.a) + " ↔ " + name(c.b) + " · " + c.files.joined(separator: ", "))
-                    .font(.caption)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(6)
-                    .background(.orange.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-            }
-            if store.sessions.isEmpty {
-                Text("Açık session yok").foregroundStyle(.secondary).padding(.vertical, 12)
+        PanelContent(sessions: store.sessions, conflicts: store.conflicts,
+                     topics: store.histories.mapValues(\.topics), lastError: store.lastError) { id in
+            // pencere açıkken seçim boş bırakılırsa ilk session'a atlar
+            if let id { store.selectedSessionId = id }
+            openWindow(id: "sessions")
+            NSApplication.shared.activate()
+        }
+    }
+}
+
+/// Panelin içeriği; store'dan bağımsız, örnek veriyle de çizilebilir.
+struct PanelContent: View {
+    let sessions: [SessionSnapshot]
+    let conflicts: [Conflict]
+    let topics: [String: [Topic]]
+    let lastError: String?
+    /// nil: pencereyi seçimi değiştirmeden aç
+    let open: (String?) -> Void
+    @State private var contentHeight: CGFloat = 0
+    @State private var showDone = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if sessions.isEmpty {
+                Text("Açık session yok")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
             } else {
                 ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(store.sessions) { SessionRow(session: $0, store: store) }
-                    }
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                    list.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 // MenuBarExtra penceresi ideal boyuta göre açılır; ScrollView'ın ideal yüksekliği 0
                 .frame(height: min(contentHeight, 520))
             }
-            if let error = store.lastError {
-                Text(error).font(.caption2).foregroundStyle(.red).lineLimit(2)
-            }
-            HStack {
-                Button("Tüm session'lar") {
-                    openWindow(id: "sessions")
-                    NSApplication.shared.activate()
-                }
-                Spacer()
-                Button("Çık") { NSApplication.shared.terminate(nil) }
+            if let lastError {
+                Text(lastError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .help(lastError)
+                    .padding(.horizontal, 21)
+                    .padding(.bottom, 10)
             }
         }
-        .padding(12)
-        .frame(width: 380)
+        .frame(width: 360)
     }
 
-    private func name(_ id: String) -> String {
-        store.sessions.first { $0.id == id }?.name ?? String(id.prefix(8))
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("Session Radar").font(.headline)
+            if !sessions.isEmpty {
+                Text("\(sessions.count) session").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Menu {
+                Button("Tüm session'lar") { open(nil) }
+                Divider()
+                Button("Çık") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .padding(.leading, 21)
+        .padding(.trailing, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var list: some View {
+        let done = sessions.filter { $0.state == .turnDone || $0.state == .closed }
+        return VStack(alignment: .leading, spacing: 4) {
+            ForEach(sessions.filter { $0.state == .waiting || $0.state == .problem }) { tile($0) }
+            ForEach(conflicts, id: \.pairKey) { c in
+                Tile(tint: .red, action: { open(c.a) }) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .frame(width: 8)
+                        Text(conflictText(c)).lineLimit(2)
+                    }
+                }
+            }
+            ForEach(sessions.filter { $0.state == .working }) { tile($0) }
+            if !done.isEmpty {
+                Button {
+                    showDone.toggle()
+                } label: {
+                    Label("\(done.count) bitti", systemImage: "checkmark")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.quaternary.opacity(0.6), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 5)
+                .padding(.top, 4)
+                if showDone {
+                    ForEach(done) { SessionTile(session: $0, topics: [], open: open) }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+    }
+
+    private func tile(_ s: SessionSnapshot) -> some View {
+        SessionTile(session: s, topics: topics[s.id] ?? [], open: open)
+    }
+
+    private func conflictText(_ c: Conflict) -> String {
+        func name(_ id: String) -> String { sessions.first { $0.id == id }?.name ?? String(id.prefix(8)) }
+        let files = c.files.prefix(2).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+        let more = c.files.count > 2 ? " +\(c.files.count - 2)" : ""
+        return "Çakışma: \(name(c.a)) ↔ \(name(c.b)) · \(files)\(more)"
     }
 }
 
-private struct SessionRow: View {
+/// Bekleme süresi: "4 dk", "2 sa", "1 gün".
+private func waitText(since date: Date) -> String {
+    let m = max(1, Int(Date().timeIntervalSince(date) / 60))
+    return m < 60 ? "\(m) dk" : m < 1440 ? "\(m / 60) sa" : "\(m / 1440) gün"
+}
+
+/// Tıklanabilir satır; renk verilirse kart: hafif renkli zemin, solda şerit.
+private struct Tile<Content: View>: View {
+    var tint: Color?
+    let action: () -> Void
+    @ViewBuilder var content: Content
+    @State private var hovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        content
+            .padding(.leading, 13)
+            .padding(.trailing, 10)
+            .padding(.vertical, tint == nil ? 7 : 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                Group {
+                    if let tint {
+                        tint.opacity(hovered ? 0.18 : 0.12).overlay(alignment: .leading) { tint.frame(width: 3) }
+                    } else if hovered {
+                        Color.primary.opacity(0.06)
+                    }
+                }
+                .clipShape(shape)
+            }
+            .contentShape(shape)
+            .onHover { hovered = $0 }
+            .onTapGesture(perform: action)
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct SessionTile: View {
     let session: SessionSnapshot
-    let store: RadarStore
-    @State private var expanded = false
+    let topics: [Topic]
+    let open: (String?) -> Void
 
     var body: some View {
         let s = session
-        VStack(alignment: .leading, spacing: 3) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+        Tile(tint: s.state == .waiting || s.state == .problem ? s.state.color : nil, action: { open(s.id) }) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
                     Circle().fill(s.state.color).frame(width: 8, height: 8)
-                    Text(s.state.label).font(.caption.weight(.semibold)).foregroundStyle(s.state.color)
                     Text(s.name).fontWeight(.medium).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if let p = s.progress {
-                        Text("\(p.done)/\(p.total)").font(.caption.monospacedDigit())
+                    Spacer(minLength: 8)
+                    if let trailing {
+                        Text(trailing).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                     }
-                    Text(relativeFormatter.localizedString(for: s.updatedAt, relativeTo: Date()))
-                        .font(.caption).foregroundStyle(.secondary)
                 }
-                if let repo = s.repoName {
-                    Text([repo, s.branch].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Group {
+                    if let note = s.note {
+                        if s.state == .waiting { Text("“\(note)”").lineLimit(3) }
+                        if s.state == .problem { Text(note).foregroundStyle(.secondary).lineLimit(1) }
+                    }
+                    if !topics.isEmpty { TopicStrip(topics: topics, session: s) }
                 }
-                if let task = s.task { Text(task).font(.callout).lineLimit(1) }
-                // Bash eylemi uzun ya da çok satırlı olabilir
-                if let action = s.action { Text(action).font(.caption.monospaced()).lineLimit(1) }
-                // konu yoksa son istek zaten görev satırında
-                if let current = s.currentTopic, current != s.task {
-                    Text("Konu: " + current + (s.openTopics > 0 ? " · \(s.openTopics) açık konu" : ""))
-                        .font(.caption).lineLimit(1)
-                }
+                .padding(.leading, 16)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { expanded.toggle() }
-            if expanded { SessionDetail(session: s, store: store) }
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var trailing: String? {
+        switch session.state {
+        case .waiting: session.waitingSince.map(waitText)
+        case .working: session.progress.map { "\($0.done)/\($0.total)" }
+        default: nil
+        }
     }
 }
 
-private struct SessionDetail: View {
+/// Son 8 konu, eskiden yeniye noktalar; üzerine gelinen ya da tıklanan noktanın başlığı ve durumu yazar.
+struct TopicStrip: View {
+    let topics: [Topic]
     let session: SessionSnapshot
-    let store: RadarStore
+    @State private var hovered: Int?
+    @State private var selected: Int?
 
     var body: some View {
-        let st = session.status
-        VStack(alignment: .leading, spacing: 4) {
-            if let v = st?.why { Text("Neden: " + v) }
-            if let v = st?.phase { Text("Aşama: " + v) }
-            if let v = st?.next { Text("Sıradaki adım: " + v) }
-            ForEach(Array((st?.todo ?? []).enumerated()), id: \.offset) { _, item in
-                Text((item.done ? "✓ " : "○ ") + item.text)
-                    .foregroundStyle(item.done ? Color.secondary : Color.primary)
+        let shown = Array(topics.suffix(8))
+        let hidden = topics.count - shown.count
+        HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                if hidden > 0 {
+                    Text("+\(hidden)").font(.caption).monospacedDigit().foregroundStyle(.secondary).padding(.trailing, 5)
+                }
+                ForEach(Array(shown.enumerated()), id: \.element.id) { i, t in
+                    if i > 0 { Rectangle().fill(.tertiary).frame(width: 8, height: 1) }
+                    dot(t)
+                }
             }
-            if let note = session.note {
-                Text((session.state == .problem ? "Sorun: " : "Not: ") + note)
-            }
-            if !session.pendingFiles.isEmpty {
-                Text("Bekleyen dosyalar: " + session.pendingFiles.sorted().joined(separator: ", "))
-            }
-            AskBox(sessionId: session.id, store: store).padding(.top, 4)
+            caption(shown)
         }
-        .font(.caption)
-        .padding(.top, 4)
+        .font(.subheadline)
+    }
+
+    /// seçili nokta şeritten taştıysa varsayılan yazıya döner
+    @ViewBuilder private func caption(_ shown: [Topic]) -> some View {
+        if let t = shown.first(where: { $0.id == (hovered ?? selected) }) {
+            HStack(spacing: 4) {
+                Text(t.title).lineLimit(1)
+                Text("· " + stateLabel(t))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+        } else if let title = topics.last(where: { $0.state == "active" })?.title ?? session.currentTopic {
+            Text(title).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private func stateLabel(_ t: Topic) -> String {
+        topicStateLabel(t.state, sessionClosed: session.state == .closed || !session.alive)
+    }
+
+    private func dot(_ t: Topic) -> some View {
+        let color = topicColor(t.state, session: session.state)
+        let size: CGFloat = t.state == "active" ? 9 : 7
+        return Group {
+            // açık kalan konu içi boş halka
+            if t.state == "open" { Circle().strokeBorder(color, lineWidth: 1.5) } else { Circle().fill(color) }
+        }
+        .frame(width: size, height: size)
+        .overlay {
+            if selected == t.id { Circle().stroke(.primary, lineWidth: 1).padding(-3) }
+        }
+        // isabet alanı noktadan geniş; yerleşim değişmez
+        .padding(4)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { hovered = t.id } else if hovered == t.id { hovered = nil }
+        }
+        .onTapGesture { selected = selected == t.id ? nil : t.id }
+        .padding(-4)
+        .accessibilityLabel(t.title + ", " + stateLabel(t))
     }
 }
