@@ -6,8 +6,10 @@ public struct Topic: Codable, Equatable, Sendable {
     public var state: String   // "active" | "open" | "done"
     public var summary: String
     public var requests: [Int]
-    public init(id: Int, title: String, state: String, summary: String, requests: [Int]) {
-        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests
+    /// bu konunun sapıldığı konunun id'si; yoksa ana iş
+    public var from: Int?
+    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil) {
+        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests; self.from = from
     }
 }
 
@@ -38,6 +40,7 @@ public struct SessionHistory: Equatable, Sendable {
 public struct TopicResponse: Decodable, Equatable, Sendable {
     public struct Item: Decodable, Equatable, Sendable {
         public var id: Int; public var title: String; public var state: String; public var summary: String
+        public var from: Int?
     }
     public var topics: [Item]
     public var assign: [String: Int]   // "istek no" -> konu id
@@ -78,7 +81,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     fmt.dateFormat = "HH:mm"
 
     let topicLines = existing.isEmpty ? "(yok)" : existing.map { t in
-        "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(requestNumbers(t.requests)) | özet: \(t.summary)"
+        "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(requestNumbers(t.requests)) | özet: \(t.summary) | sapak: \(t.from.map(String.init) ?? "-")"
     }.joined(separator: "\n")
 
     let reqLines = requests.map { r in
@@ -93,11 +96,12 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
 
     Kurallar:
     - Yalnızca JSON döndür, başka metin yazma.
-    - Şema: {"topics":[{"id":1,"title":"…","state":"active|open|done","summary":"…"}],"assign":{"12":1}}
+    - Şema: {"topics":[{"id":1,"title":"…","state":"active|open|done","summary":"…","from":null}],"assign":{"12":1}}
     - Mevcut tüm konuları gerektiği gibi güncelleyerek döndür. Yeni bir konu gerekirse id değerini mevcut en büyük id'den büyük ver.
     - Her yeni istek numarasını "assign" içinde tam olarak bir konuya ata (anahtar istek numarası, değer konu id'si). Eski istekleri assign'a yazma.
     - Başlıklar en fazla 6 kelime, özetler en fazla 3 cümle olsun ve Türkçe yazılsın.
     - Bir konunun işi bitmişse "done", yarım kalıp sonra dönülecekse "open" olarak işaretle.
+    - "from": konu başka bir konu bitmeden ondan sapılarak açıldıysa o konunun id'si; önceki iş bittikten sonra ya da ana iş olarak başladıysa null. Mevcut from değerlerini gerekmedikçe değiştirme. Sapak konunun işi bittiyse ya da ana konuya bağlandıysa onu "done" yap.
     - Başlıklar gereksiz yere değiştirilmesin.
     - \(dataNotice)
 
@@ -132,7 +136,7 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
     for t in existing { byId[t.id] = t }
     for item in response.topics {
         var t = byId[item.id] ?? Topic(id: item.id, title: "", state: "open", summary: "", requests: [])
-        t.title = item.title; t.state = item.state; t.summary = item.summary
+        t.title = item.title; t.state = item.state; t.summary = item.summary; t.from = item.from
         byId[item.id] = t
     }
     for r in newRequests {
@@ -146,7 +150,14 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
         let isLast = topics[i].requests.max() == maxIndex
         topics[i].state = isLast ? "active" : (topics[i].state == "done" ? "done" : "open")
     }
-    return topics.sorted { ($0.requests.min() ?? 0) < ($1.requests.min() ?? 0) }
+    topics.sort { ($0.requests.min() ?? 0) < ($1.requests.min() ?? 0) }
+    // geçerli sapak: listede var, kendisi değil, ondan önce başlamış
+    let start = Dictionary(uniqueKeysWithValues: topics.map { ($0.id, $0.requests.min() ?? 0) })
+    for i in topics.indices {
+        if let f = topics[i].from, f != topics[i].id, let s = start[f], s < (topics[i].requests.min() ?? 0) { continue }
+        topics[i].from = nil
+    }
+    return topics
 }
 
 public func loadTopicFile(_ url: URL) -> TopicFile? {

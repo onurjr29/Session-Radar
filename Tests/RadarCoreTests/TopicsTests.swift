@@ -129,3 +129,29 @@ func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = 
 @Test func startContextHasNoTopics() {
     #expect(!sessionStartContext(statusFile: URL(fileURLWithPath: "/x/s.json")).contains("topics"))
 }
+
+@Test func oldTopicFileWithoutFromDecodes() throws {
+    let json = #"{"version":2,"sessionId":"s","grouped":1,"updatedAt":"2026-01-01T00:00:00Z","topics":[{"id":1,"title":"A","state":"open","summary":"","requests":[1]},{"id":2,"title":"B","state":"active","summary":"","requests":[2]}]}"#
+    let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+    let f = try dec.decode(TopicFile.self, from: Data(json.utf8))
+    #expect(f.topics.count == 2 && f.topics.allSatisfy { $0.from == nil })
+}
+@Test func mergeKeepsValidFrom() throws {
+    let existing = [Topic(id: 1, title: "A", state: "active", summary: "", requests: [1, 2])]
+    let resp = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":""},{"id":2,"title":"B","state":"active","summary":"","from":1}],"assign":{"3":2}}"#))
+    let m = try #require(mergeTopics(existing: existing, response: resp, newRequests: [req(3)]))
+    #expect(m.first { $0.id == 2 }?.from == 1 && m.first { $0.id == 1 }?.from == nil)
+}
+@Test func mergeDropsInvalidFrom() throws {
+    // 1 -> kendisi, 2 -> var olmayan, 3 -> kendisinden sonra başlayan
+    let resp = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":"","from":1},{"id":2,"title":"B","state":"open","summary":"","from":99},{"id":3,"title":"C","state":"active","summary":"","from":4},{"id":4,"title":"D","state":"open","summary":"","from":null}],"assign":{"1":1,"2":2,"3":3,"4":4}}"#))
+    let m = try #require(mergeTopics(existing: [], response: resp, newRequests: [req(1), req(2), req(3), req(4)]))
+    #expect(m.count == 4 && m.allSatisfy { $0.from == nil })
+}
+@Test func topicPromptListsFromAndRule() {
+    let existing = [Topic(id: 1, title: "A", state: "open", summary: "", requests: [1]),
+                    Topic(id: 2, title: "B", state: "active", summary: "", requests: [2], from: 1)]
+    let p = buildTopicPrompt(existing: existing, requests: [req(3)])
+    #expect(p.contains("| sapak: 1") && p.contains("| sapak: -") && p.contains(#""from":null"#))
+    #expect(p.contains("- \"from\"") && p.contains(dataNotice))
+}
