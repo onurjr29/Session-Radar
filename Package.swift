@@ -7,6 +7,7 @@ let package = Package(
     targets: [
         .target(name: "RadarCore"),
         .executableTarget(name: "radar-hook", dependencies: ["RadarCore"]),
+        .executableTarget(name: "SessionRadar", dependencies: ["RadarCore"]),
         .testTarget(name: "RadarCoreTests", dependencies: ["RadarCore"]),
     ],
     swiftLanguageModes: [.v6]
