@@ -77,6 +77,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var waitingOnTool = false
     /// süreç çalışıyor; beklenmedik kapanan session "sorun" durumunda ama canlı değil
     public var alive = true
+    /// durum dosyasının son yazılma zamanı
+    public var statusUpdatedAt: Date? = nil
 }
 
 public struct RadarPaths: Sendable {

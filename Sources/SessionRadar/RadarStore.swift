@@ -233,7 +233,7 @@ private actor Engine {
             var inputs = SessionInputs(
                 sessionId: c.id, agent: c.agent, registry: c.registry, alive: c.alive, seenAlive: c.seenAlive,
                 activity: c.activity, status: status(c.id),
-                transcript: info, repo: repos[c.cwd], lastSeen: now)
+                transcript: info, repo: repos[c.cwd], lastSeen: now, statusAt: statuses[c.id]?.mtime)
             // gizli session'ların istek geçmişi okunmaz; tutulma kararı konulara bağlı değil
             guard shouldKeep(buildSnapshot(inputs), alive: c.alive, now: now) else { continue }
             inputs.topics = history(c.id).topics

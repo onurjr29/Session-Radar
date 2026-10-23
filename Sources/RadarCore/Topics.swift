@@ -123,7 +123,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
 }
 
 /// Model metni arayüzde gösterilir ve paylaşılır: tek satır, kontrol/biçim karakteri yok, uzunluk sınırlı
-private func oneLine(_ s: String, max: Int) -> String {
+func oneLine(_ s: String, max: Int) -> String {
     let kept = s.unicodeScalars.filter { $0.properties.isWhitespace || !CharacterSet.controlCharacters.contains($0) }
     return String(String(String.UnicodeScalarView(kept)).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(max))
 }

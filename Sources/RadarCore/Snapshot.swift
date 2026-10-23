@@ -12,14 +12,15 @@ public struct SessionInputs: Sendable {
     public var repo: RepoInfo?
     public var lastSeen: Date
     public var topics: [Topic]
+    public var statusAt: Date?
 
     public init(sessionId: String, agent: AgentEntry?, registry: RegistryEntry?, alive: Bool, seenAlive: Bool,
                 activity: Activity?, status: SessionStatus?, transcript: TranscriptInfo?, repo: RepoInfo?, lastSeen: Date,
-                topics: [Topic] = []) {
+                topics: [Topic] = [], statusAt: Date? = nil) {
         self.sessionId = sessionId; self.agent = agent; self.registry = registry; self.alive = alive
         self.seenAlive = seenAlive; self.activity = activity
         self.status = status; self.transcript = transcript; self.repo = repo; self.lastSeen = lastSeen
-        self.topics = topics
+        self.topics = topics; self.statusAt = statusAt
     }
 }
 
@@ -105,7 +106,7 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open,
         waitingSince: state == .waiting ? i.activity?.waitingSince.map { Date(timeIntervalSince1970: $0) } : nil,
         waitingOnTool: state == .waiting && i.activity?.waitingOnTool == true,
-        alive: i.alive)
+        alive: i.alive, statusUpdatedAt: i.statusAt)
 }
 
 public func shouldKeep(_ s: SessionSnapshot, alive: Bool, now: Date) -> Bool {
