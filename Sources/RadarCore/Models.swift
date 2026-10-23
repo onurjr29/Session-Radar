@@ -96,6 +96,11 @@ public struct RadarPaths: Sendable {
     public var statusDir: URL { root.appending(path: "status") }
     public var askDir: URL { root.appending(path: "ask") }
     public var topicsDir: URL { root.appending(path: "topics") }
+    public var teamDir: URL { root.appending(path: "team") }
+    public var teamStateFile: URL { teamDir.appending(path: "state.json") }
+    public var teamSettingsFile: URL { teamDir.appending(path: "settings.json") }
+    public var teamAuthFile: URL { teamDir.appending(path: "auth.json") }
+    public func teamDelivered(_ sid: String) -> URL { teamDir.appending(path: "delivered/\(sid).json") }
     public func eventLog(_ sessionId: String) -> URL { eventsDir.appending(path: "\(sessionId).jsonl") }
     public func statusFile(_ sessionId: String) -> URL { statusDir.appending(path: "\(sessionId).json") }
     public func topicFile(_ sessionId: String) -> URL { topicsDir.appending(path: "\(sessionId).json") }
@@ -103,7 +108,7 @@ public struct RadarPaths: Sendable {
     /// Veri klasörlerini yalnızca kullanıcıya açık (0700) oluşturur; önceden var olanları da daraltır.
     public func prepareDirectories() throws {
         let fm = FileManager.default
-        for dir in [root, eventsDir, statusDir, askDir, topicsDir] {
+        for dir in [root, eventsDir, statusDir, askDir, topicsDir, teamDir] {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         }

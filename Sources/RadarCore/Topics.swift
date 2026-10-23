@@ -182,8 +182,13 @@ public func loadTopicFile(_ url: URL) -> TopicFile? {
 
 public func saveTopicFile(_ file: TopicFile, to url: URL) throws {
     let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
-    let data = try enc.encode(file)
-    // Önce 0600 ile geçici dosya, sonra rename: izin penceresi ve yarım yazım olmaz
+    try writeAtomically(try enc.encode(file), to: url)
+}
+
+/// Önce 0600 ile geçici dosya, sonra rename: izin penceresi ve yarım yazım olmaz
+public func writeAtomically(_ data: Data, to url: URL) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
     let tmp = url.deletingLastPathComponent().appending(path: ".\(UUID().uuidString).tmp")
     guard FileManager.default.createFile(atPath: tmp.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
         throw CocoaError(.fileWriteUnknown)

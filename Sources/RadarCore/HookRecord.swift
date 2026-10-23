@@ -75,5 +75,21 @@ public func runHook(stdin: Data, paths: RadarPaths, now: Double, pid: Int32? = n
     event.pid = pid
     guard let line = try? JSONEncoder().encode(event) else { return nil }
     try? appendLine(line, to: paths.eventLog(event.sessionId))
-    return event.event == "SessionStart" ? sessionStartContext(statusFile: paths.statusFile(event.sessionId)) : nil
+    let state: TeamState? = readJSON(TeamState.self, from: paths.teamStateFile)
+    let old = readJSON(TeamDelivered.self, from: paths.teamDelivered(event.sessionId)) ?? TeamDelivered()
+    let r = teamHook(event, state: state, delivered: old, now: Date(timeIntervalSince1970: now))
+    if r.delivered != old { try? writeJSON(r.delivered, to: paths.teamDelivered(event.sessionId)) }
+
+    if event.event == "SessionStart" {
+        let base = sessionStartContext(statusFile: paths.statusFile(event.sessionId))
+        return r.context.map { base + "\n\n" + $0 } ?? base
+    }
+    var out: [String: Any]
+    if let deny = r.deny {
+        out = ["hookEventName": event.event, "permissionDecision": "deny", "permissionDecisionReason": deny]
+    } else if let c = r.context {
+        out = ["hookEventName": event.event, "additionalContext": c]
+    } else { return nil }
+    guard let data = try? JSONSerialization.data(withJSONObject: ["hookSpecificOutput": out]) else { return nil }
+    return String(data: data, encoding: .utf8)
 }
