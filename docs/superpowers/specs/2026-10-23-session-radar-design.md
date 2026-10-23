@@ -19,7 +19,7 @@ Bunların bildirim olarak gelmesi isteniyor.
 3. **Session listesi** kişiye göre gruplanır (Onur / Anıl). Her satırda şunlar yer alır:
    - session adı,
    - proje (repo adı) ve branch,
-   - durum: çalışıyor / seni bekliyor / boşta / bitti / sorun var,
+   - durum: çalışıyor / seni bekliyor / tur bitti / sorun var / kapandı (tanımlar aşağıda, "Durum tanımları" bölümünde),
    - şu anki görev (kısa başlık),
    - şu anki eylem (ör. "`src/Home.tsx` düzenleniyor", "`npm test` çalışıyor"),
    - ilerleme (ör. 3/7),
@@ -31,8 +31,31 @@ Bunların bildirim olarak gelmesi isteniyor.
    - bir session işini bitirdiğinde,
    - bir sorun çıktığında,
    - Anıl'la çakışma olduğunda (aşağıya bakınız).
-7. **Çakışma uyarısı:** Aynı repoda (git remote adresine göre eşleştirilir) iki session'ın değiştirdiği dosyalar kesişirse uyarı verilir. Bu iki session Onur'un ve Anıl'ın olabilir, Onur'un kendi iki session'ı da olabilir.
+7. **Çakışma uyarısı:** Aynı repoda (git remote adresine göre eşleştirilir) iki session'ın değiştirdiği dosyalar kesişirse uyarı verilir. Bu iki session Onur'un ve Anıl'ın olabilir, Onur'un kendi iki session'ı da olabilir. Tam tanım aşağıda, "Çakışma tanımı" bölümünde.
 8. **Paylaşım:** Her iki kullanıcının uygulaması, session özetlerini ortak bir Supabase tablosuna yazar ve karşı tarafınkini Realtime ile dinler.
+
+## Durum tanımları ve bildirimler *(Claude'un kararı)*
+
+| Durum | Ne zaman | Simgedeki sayıya dahil mi | Bildirim |
+|---|---|---|---|
+| **çalışıyor** | `UserPromptSubmit` ile `Stop` arasında (Claude bir tur üzerinde çalışırken) | hayır | yok |
+| **seni bekliyor** | Bekleyen bir izin, elicitation ya da `agent_needs_input` olduğunda; veya `Stop` sonrasında son asistan mesajı kullanıcıya bir soru sorduğunda | **evet** | bir kez, durum başladığında |
+| **tur bitti** | `Stop` geldiğinde ve soru olmadığında. Sıra kullanıcıdadır ama cevap beklenmiyordur. Tüm görevin bitip bitmediğini satırdaki checklist ilerlemesi gösterir. | hayır | her `Stop`'ta bir kez ("X işini bitirdi") |
+| **sorun var** | Session durum dosyasına bir sorun yazdığında; session süreci `SessionEnd` olmadan öldüğünde; ya da kullanım limiti nedeniyle durakladığında (`quota_auto_resume_*` bildirimleri) | evet | bir kez |
+| **kapandı** | `SessionEnd` geldiğinde veya session `claude agents --json` listesinden düştüğünde | hayır | yok |
+
+- Kullanıcı session'a yeni bir mesaj yazınca, yani yeni bir `UserPromptSubmit` gelince, "seni bekliyor" ve "tur bitti" durumları kendiliğinden sona erer.
+- Başarısız tool çağrıları (ör. hata veren bir test komutu) sorun sayılmaz. Bunlar Claude'un normal çalışmasının parçası.
+- Bildirimler yalnızca durum değiştiğinde bir kez gönderilir, tekrarlanmaz. Bildirim sayısı kullanıcının session'lara mesaj yazma sıklığıyla sınırlı kalır.
+
+## Çakışma tanımı *(Claude'un kararı)*
+
+- **Bir session'ın dosyaları:** Session'ın yaşamı boyunca `Edit` / `Write` hook'larıyla dokunduğu dosyalardan, hâlâ **commit'lenmemiş ya da commit'lenip push'lanmamış** olanlar. Bu dosyalar `git status --porcelain` ile `git diff --name-only @{upstream}...HEAD` çıktısının birleşimiyle bulunur. Upstream yoksa remote'un varsayılan branch'ine göre bakılır.
+- **Ne zaman sayılmaz olur:** Dosya push'landığında. Push'tan sonra değişiklik git'te görünür hâle gelir ve olası çakışmayı git'in kendisi yönetir.
+- **Session bittiğinde:** Dosya hâlâ commit'lenmemiş veya push'lanmamışsa sayılmaya devam eder. Kişi bazında bir "bekleyen değişiklikler" kaydı olarak kalır ve satır kapansa bile çakışma kontrolüne dahil edilir.
+- **Branch'ler:** Farklı branch'ler de çakışma sayılır, çünkü merge sırasında çakışırlar. Uyarıda iki tarafın branch'i de gösterilir.
+- **Aynı klasördeki iki session:** Aynı checkout'ta (worktree değil) çalışan iki session aynı `git status`'u paylaşır. Bu durumda dosyalar session'lara yalnızca `Edit` / `Write` hook kayıtlarına göre atfedilir.
+- **Paylaşılan alan:** Supabase'e session başına bu dosya listesi gider. Yollar repo köküne göre göreli tutulur.
 
 ## Kapsam dışı (v1)
 
@@ -57,7 +80,8 @@ Bunların bildirim olarak gelmesi isteniyor.
 - Claude Code 2.1.30x, kimlik doğrulama claude.ai Team aboneliğiyle yapılıyor. Anıl'ın da aynı Team organizasyonunda olduğu tahmin ediliyor.
 - Claude Code'un iç dosya formatları (transcript, `~/.claude/sessions`) belgelenmemiş ve güncellemelerde değişebilir. Okuyucular toleranslı olmalı: bilinmeyen satır veya alan atlanır, uygulama çökmez, ilgili alan "bilinmiyor" görünür.
 - **Supabase ücretsiz planı:**
-  - Proje, Eventpal'in organizasyonu altına değil ayrı, ücretsiz bir organizasyona açılır. Ücretli organizasyonda her ek proje ücretlendirilebiliyor.
+  - Onur, `oer@eventpal.co` ile ücretsiz bir Supabase hesabı açtı ve GitHub hesabını bağladı (2026-10-23). Proje bu hesabın ücretsiz organizasyonuna açılır.
+  - Proje Eventpal'in ücretli organizasyonu altına açılmaz. Ücretli organizasyonda her ek proje ücretlendirilebiliyor.
   - Ücretsiz projeler bir hafta kullanılmazsa uykuya alınır. Bu durumda uygulama "paylaşım kapalı" gösterir ve kişisel kısım çalışmaya devam eder.
 - **Dağıtım:** Anıl'a derlenmiş `.app` gönderilir. Apple Developer ID varsa uygulama imzalanır ve notarize edilir. Yoksa Anıl ilk açılışta macOS uyarısını elle geçer, bunun talimatı verilir.
 
