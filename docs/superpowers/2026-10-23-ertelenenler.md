@@ -58,4 +58,18 @@ Per-task ve son incelemelerde bulunup ertelenen Minor bulgular ve kapsam dışı
 
 ## Ayrı ele alınacak
 
-- Arka plan session'ı 19e2c8ef: `claude agents --json` 18 Ekim'den beri `state: working` raporluyor; hook olayı olmadığı için radar onu sürekli "Çalışıyor" gösteriyor ve konularını gruplamıyor.
+- ~~Arka plan session'ı 19e2c8ef sürekli "Çalışıyor"~~ — çözüldü (6c733c3): olaysız session'da süreç `status` alanı esas alınıyor.
+
+## Yeni arayüz planı (2026-10-23-native-ui)
+
+Task ve son incelemelerden kalan, birleştirmeyi engellemeyen bulgular:
+
+- Konular: Haiku `from` alanını yazmazsa kayıtlı sapak bilgisi silinir (spec: son geçerli cevap esas).
+- Akış: dal yerleşimi açık dallar arasında sırayla yukarı/aşağı dönüşüyor; önceki bir dal kapanınca sonraki açık dallar taraf değiştirir (plan kuralı 4). Kalıcı şerit ataması gerekirse ayrı iş.
+- Akış: ana hattaki ara kartın arkasından geçen dal çizgisi yanlış karttan çıkıyormuş gibi görünebilir (kesişme önleme yok).
+- Tuval: mini haritadaki görünen alan çerçevesi odak animasyonunda hareket etmek yerine atlıyor; kart yükseklikleri tahmini (çok satırlı kartlarda ortalama ve mini harita hafif kayar); sürükleme sırasında konu değişirse kamera bir kez takip edebilir.
+- Tuval: pencere boyutu `body` içinden zamanlanan bir Task ile eşitleniyor (`FlowCanvas.swift:52`, yorumlu). Daha temiz yol: `geo.size`'ı kameranın komut yollarına doğrudan geçirmek.
+- Tuval: kırmızı sorun satırlarının beyaz kart üzerindeki kontrastı ~4:1 (sınırda).
+- Pencere: adım listesi seçimden sonra 300 ms × 2 kaydırıyor; bu sürede elle kaydırma geri çekilir. Gün aşan konuların istek satırları yalnızca saat gösteriyor.
+- Panel: konu şeridi noktaları VoiceOver'da ayrı ayrı seçilemiyor (kart tek öğe). İzin isteğinde ne tool ne mesaj varsa kartta durum dosyasındaki sorun metni görünebilir (nadir).
+- Elle doğrulanacaklar: cam görünümü, hover ve tıklamalar, kaydırma/yakınlaştırma, VoiceOver.
