@@ -3,6 +3,15 @@ import SwiftUI
 
 private let hourMinute = Date.FormatStyle.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
     .locale(Locale(identifier: "tr_TR"))
+private let dayHourMinute = hourMinute.day().month(.abbreviated)
+
+/// "09:12–09:40"; uçlar farklı günlerdeyse "22 Eki 23:10–23 Eki 09:12"
+private func timeRange(_ dates: [Date]) -> String? {
+    guard let lo = dates.min(), let hi = dates.max() else { return nil }
+    let style = Calendar.current.isDate(lo, inSameDayAs: hi) ? hourMinute : dayHourMinute
+    let a = lo.formatted(style), b = hi.formatted(style)
+    return a == b ? a : a + "–" + b
+}
 
 struct SessionWindow: View {
     let store: RadarStore
@@ -115,7 +124,10 @@ private struct SessionDetail: View {
                 }
             }
             .onChange(of: topics, initial: true) { selected = resolveTopicSelection(selected, topics: topics) }
-            .onChange(of: session.id) { selected = resolveTopicSelection(nil, topics: topics) }
+            .onChange(of: session.id) {
+                selected = resolveTopicSelection(nil, topics: topics)
+                asking = false
+            }
     }
 }
 
@@ -143,9 +155,15 @@ private struct StepsList: View {
             }
             .listStyle(.sidebar)
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: selected)
-            // tuvalde seçilen kart listede görünür olsun; açılışta liste yerleştikten sonra
+            // tuvalde seçilen kart listede görünür olsun. Satır genişledikten sonra kayar; ilk kaydırma henüz ölçülmemiş
+            // satırların tahmini yüksekliğiyle kısa kalabiliyor, ikincisi ölçülmüş satırlarla tamamlar (görünüyorsa kıpırdamaz)
             .task(id: selected) {
-                if let selected { withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { proxy.scrollTo(selected) } }
+                guard let selected else { return }
+                for _ in 0..<2 {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { proxy.scrollTo(selected) }
+                }
             }
         }
     }
@@ -187,10 +205,8 @@ private struct StepsList: View {
 
     private func details(_ t: Topic) -> some View {
         let mine = requests.filter { t.requests.contains($0.index) }
-        let times = mine.compactMap(\.at).map { $0.formatted(hourMinute) }
-        let range = times.first.flatMap { a in times.last.map { a == $0 ? a : a + "–" + $0 } }
         let closed = session.state == .closed || !session.alive
-        let meta: [String?] = [topicStateLabel(t.state, sessionClosed: closed), range, "\(t.requests.count) istek"]
+        let meta: [String?] = [topicStateLabel(t.state, sessionClosed: closed), timeRange(mine.compactMap(\.at)), "\(t.requests.count) istek"]
         return VStack(alignment: .leading, spacing: 5) {
             Text(meta.compactMap { $0 }.joined(separator: " · ")).foregroundStyle(.secondary)
             if !t.summary.isEmpty { Text(t.summary).font(.callout) }

@@ -47,6 +47,9 @@ struct FlowCanvas: View {
         GeometryReader { geo in
             // boyut state'e geçmeden önceki ilk karede de kamera doğru yerde olsun
             let cam = live(viewport == geo.size ? camera : settled(l, geo.size), l, geo.size)
+            // pencere ilk açılırken son boyut için onChange/onGeometryChange çağrılmıyor (Window sahnesinde görüldü);
+            // kamera işlemleri viewport'a dayandığı için body yeni boyutu görünce bir sonraki turda eşitlenir
+            let _ = viewport == geo.size ? nil : Task { [size = geo.size] in resize(to: size) }
             ZStack(alignment: .topLeading) {
                 DotGrid(camera: cam).fill(Color.primary.opacity(0.16))
                 FlowWorld(cards: l.cards, wires: l.wires, start: l.start, selected: $selected)
@@ -67,10 +70,6 @@ struct FlowCanvas: View {
                     Minimap(cards: l.cards, content: l.content, camera: cam, viewport: geo.size, onCenter: center).padding(12)
                 }
             }
-            .onChange(of: geo.size, initial: true) {
-                viewport = geo.size
-                camera = settled(layout, geo.size)
-            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: l.nodes) { follow() }
@@ -82,6 +81,12 @@ struct FlowCanvas: View {
 
     private func nowCamera(_ l: CanvasLayout, _ size: CGSize) -> Camera {
         clampCamera(focusCamera(on: l.nowFrame, scale: camera.scale, viewport: size), content: l.content, viewport: size)
+    }
+
+    private func resize(to size: CGSize) {
+        guard viewport != size else { return }
+        viewport = size
+        camera = settled(layout, size)
     }
 
     private func settled(_ l: CanvasLayout, _ size: CGSize) -> Camera {

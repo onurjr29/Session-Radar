@@ -13,6 +13,9 @@ import UserNotifications
     var selectedSessionId: String?
     /// dakikada bir ilerler; eşit snapshot ataması yeniden çizdirmediği için bekleme süresi buna bağlı
     var now = Date()
+    /// session başına "Soru sor" durumu; popover kapanınca kaybolmasın
+    // ponytail: listeden düşen session'ların kaydı silinmez; birkaç kısa metin, uygulama yeniden açılınca gider
+    var asks: [String: AskState] = [:]
 
     private let paths = RadarPaths.fromEnvironment()
     private let engine: Engine
@@ -46,7 +49,20 @@ import UserNotifications
         }
     }
 
-    func ask(_ question: String, about sessionId: String) async -> String {
+    /// Taslak soruyu sorar; aynı session'da cevap beklenirken ikinci çağrı başlamaz.
+    func sendAsk(_ sessionId: String) {
+        let q = (asks[sessionId]?.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, asks[sessionId]?.busy != true else { return }
+        asks[sessionId, default: AskState()].busy = true
+        asks[sessionId]?.answer = nil
+        Task {
+            let answer = await ask(q, about: sessionId)
+            asks[sessionId, default: AskState()].answer = answer
+            asks[sessionId]?.busy = false
+        }
+    }
+
+    private func ask(_ question: String, about sessionId: String) async -> String {
         guard let claude = await claude() else { return "claude bulunamadı" }
         let (status, dialogue) = await engine.askContext(sessionId)
         do {
@@ -123,6 +139,12 @@ import UserNotifications
             Task { @MainActor in self.lastError = message }
         }
     }
+}
+
+struct AskState: Equatable {
+    var question = ""
+    var answer: String?
+    var busy = false
 }
 
 private func mtime(_ url: URL) -> Date? {

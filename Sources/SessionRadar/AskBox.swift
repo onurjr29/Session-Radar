@@ -1,37 +1,28 @@
 import RadarCore
 import SwiftUI
 
+/// Soru, cevap ve bekleme durumu store'da session başına tutulur; popover kapanıp açılınca kaybolmaz.
 struct AskBox: View {
     let sessionId: String
     let store: RadarStore
-    @State private var question = ""
-    @State private var answer: String?
-    @State private var busy = false
 
     var body: some View {
+        let state = store.asks[sessionId] ?? AskState()
+        let question = Binding(get: { store.asks[sessionId]?.question ?? "" },
+                               set: { store.asks[sessionId, default: AskState()].question = $0 })
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                TextField("Bu session'a soru sor…", text: $question)
+                TextField("Bu session'a soru sor…", text: question)
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit(send)
-                Button("Sor", action: send).disabled(busy || question.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .onSubmit { store.sendAsk(sessionId) }
+                Button("Sor") { store.sendAsk(sessionId) }
+                    .disabled(state.busy || state.question.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            if busy {
+            if state.busy {
                 ProgressView().controlSize(.small)
-            } else if let answer {
+            } else if let answer = state.answer {
                 Text(answer).textSelection(.enabled)
             }
-        }
-    }
-
-    private func send() {
-        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !busy else { return }
-        busy = true
-        answer = nil
-        Task {
-            answer = await store.ask(q, about: sessionId)
-            busy = false
         }
     }
 }
