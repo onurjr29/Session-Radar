@@ -102,6 +102,8 @@ public func findConflicts(_ sessions: [SessionSnapshot]) -> [Conflict] {
     var out: [Conflict] = []
     for i in s.indices {
         for j in s.indices where j > i && s[i].repoKey == s[j].repoKey {
+            // aynı checkout'ta kapanmış session'ın dosyaları ardılının dosyalarıdır; çakışma değil
+            if let root = s[i].repoRoot, root == s[j].repoRoot, s[i].state == .closed || s[j].state == .closed { continue }
             let common = s[i].pendingFiles.intersection(s[j].pendingFiles)
             if !common.isEmpty { out.append(Conflict(a: s[i].id, b: s[j].id, files: common.sorted())) }
         }

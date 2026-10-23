@@ -59,6 +59,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var cwd: String
     public var repoName: String?
     public var repoKey: String?
+    /// checkout'un kökü (git toplevel)
+    public var repoRoot: String?
     public var branch: String?
     public var state: SessionState
     public var note: String?

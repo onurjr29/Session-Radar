@@ -73,7 +73,7 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         ?? i.lastSeen
     return SessionSnapshot(
         id: i.sessionId, name: name, cwd: cwd,
-        repoName: i.repo?.name, repoKey: i.repo?.key, branch: i.repo?.branch,
+        repoName: i.repo?.name, repoKey: i.repo?.key, repoRoot: i.repo?.toplevel, branch: i.repo?.branch,
         state: state, note: note,
         task: i.status?.task ?? shortTask(i.transcript?.lastPrompt),
         action: state == .working ? (i.activity?.action ?? i.transcript?.lastAction) : nil,

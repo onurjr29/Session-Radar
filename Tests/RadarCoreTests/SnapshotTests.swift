@@ -105,3 +105,10 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     #expect(list.sorted { $0.id < $1.id }.map { "\($0.id):\($0.alive):\($0.seenAlive):\($0.registry?.pid ?? 0)" }
             == ["a:true:true:0", "s:true:true:7"])
 }
+@Test func snapshotKeepsRepoRoot() {
+    let s = buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: nil, alive: true, seenAlive: true, activity: nil,
+                                        status: nil, transcript: nil,
+                                        repo: RepoInfo(toplevel: "/r", key: "k", name: "r", branch: "main", pending: []),
+                                        lastSeen: Date(timeIntervalSince1970: 0)))
+    #expect(s.repoRoot == "/r" && s.repoKey == "k")
+}

@@ -107,3 +107,14 @@ private func tempClonedRepo() throws -> (clone: URL, bare: URL) {
     let info = try #require(repoInfo(cwd: dir.path))
     #expect(pendingTouched([dir.path + "/a.txt"], repo: info) == ["a.txt"])
 }
+
+@Test func closedSessionDoesNotConflictWithSuccessorInSameCheckout() {
+    func s(_ id: String, _ root: String, _ st: SessionState) -> SessionSnapshot {
+        SessionSnapshot(id: id, name: id, cwd: "/", repoName: nil, repoKey: "k", repoRoot: root, branch: nil, state: st,
+                        note: nil, task: nil, action: nil, progress: nil, status: nil, pendingFiles: ["a"],
+                        transcriptPath: nil, updatedAt: Date(timeIntervalSince1970: 0))
+    }
+    #expect(findConflicts([s("A", "/r", .closed), s("B", "/r", .working)]).isEmpty)
+    #expect(findConflicts([s("A", "/r", .turnDone), s("B", "/r", .working)]).map(\.pairKey) == ["A|B"])
+    #expect(findConflicts([s("A", "/r1", .closed), s("B", "/r2", .working)]).map(\.pairKey) == ["A|B"])
+}
