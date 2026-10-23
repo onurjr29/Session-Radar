@@ -26,16 +26,18 @@ public func describeAction(tool: String, target: String?) -> String {
 private let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
 
 public func apply(_ e: HookEvent, to a: inout Activity) {
-    // radar'ın kendi dosyalarına dokunan tool olayları yok sayılır
-    if let t = e.target, t.contains("/.session-radar/") { return }
+    // radar'ın kendi dosyalarına dokunan tool olayları eylem ve dokunulan dosya sayılmaz; yalnızca beklemeyi bitirir
+    let own = e.target?.contains("/.session-radar/") == true
+    if own && e.event != "PostToolUse" { return }
     a.lastEventAt = e.ts
     a.lastEvent = e.event
     if let c = e.cwd { a.cwd = c }
     if let p = e.transcriptPath { a.transcriptPath = p }
 
     switch e.event {
-    case "SessionStart":
-        a.state = .turnDone; a.action = nil; a.note = nil
+    // compaction aynı turun devamıdır, durum korunur; resume/clear aynı id ile yeniden açar
+    case "SessionStart" where e.source != "compact":
+        a.state = .turnDone; a.action = nil; a.note = nil; a.ended = false
     case "UserPromptSubmit":
         a.state = .working; a.note = nil
     case "PreToolUse":
@@ -47,15 +49,15 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         }
     case "PostToolUse":
         if a.state == .waiting { a.state = .working; a.note = nil }
-        if let tool = e.tool, editTools.contains(tool), let t = e.target, t.hasPrefix("/") { a.touched.insert(t) }
+        if !own, let tool = e.tool, editTools.contains(tool), let t = e.target, t.hasPrefix("/") { a.touched.insert(t) }
     case "Notification":
         switch e.notificationType {
-        case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
+        case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog":
             a.state = .waiting; a.note = e.message
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
         case "quota_auto_resume_fired": a.state = .working
-        case "agent_completed": a.state = .turnDone
+        // agent_needs_input / agent_completed başka bir session hakkındadır; o session kendi hook'larını çalıştırır
         default: break
         }
     case "Stop":
@@ -88,9 +90,10 @@ public func resolveState(activity: Activity?, agent: AgentEntry?, alive: Bool, s
         }
         return (.closed, nil)
     }
-    if let p = status?.problems, p.contains(where: { !$0.isEmpty }) {
-        return (.problem, p.joined(separator: "; "))
-    }
+    let problems = status?.problems.flatMap { p in p.contains(where: { !$0.isEmpty }) ? p.joined(separator: "; ") : nil }
+    // "seni bekliyor" sorunların altında kaybolmasın
+    if let a = activity, a.state == .waiting { return (.waiting, a.note ?? problems) }
+    if let problems { return (.problem, problems) }
     if let a = activity { return (a.state, a.note) }
     guard let agent else { return (.turnDone, nil) }
     if agent.kind == "background" {

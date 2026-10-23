@@ -39,3 +39,11 @@ import Foundation
     #expect(runHook(stdin: Data("not json".utf8), paths: paths, now: 1) == nil)
     #expect(!FileManager.default.fileExists(atPath: paths.eventsDir.path))
 }
+@Test func sessionStartKeepsSource() throws {
+    let e = try #require(makeHookEvent(from: ["hook_event_name": "SessionStart", "session_id": "s-1", "source": "compact"], now: 1))
+    #expect(e.source == "compact")
+    // durum talimatı compaction'dan sonra da verilir
+    let paths = RadarPaths(root: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+    let start = try JSONSerialization.data(withJSONObject: ["hook_event_name": "SessionStart", "session_id": "s-1", "source": "compact"])
+    #expect(runHook(stdin: start, paths: paths, now: 1) != nil)
+}

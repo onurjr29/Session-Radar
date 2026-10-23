@@ -3,9 +3,9 @@ import Foundation
 @testable import RadarCore
 
 func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? = nil, msg: String? = nil,
-        q: Bool? = nil, bg: Int? = nil) -> HookEvent {
-    HookEvent(ts: 1, event: name, sessionId: "s", cwd: nil, transcriptPath: nil, tool: tool, target: target,
-              notificationType: nt, message: msg, endsWithQuestion: q, backgroundTasks: bg)
+        q: Bool? = nil, bg: Int? = nil, src: String? = nil, ts: Double = 1) -> HookEvent {
+    HookEvent(ts: ts, event: name, sessionId: "s", cwd: nil, transcriptPath: nil, tool: tool, target: target,
+              notificationType: nt, message: msg, endsWithQuestion: q, backgroundTasks: bg, source: src)
 }
 @Test func reduceFollowsTurnLifecycle() {
     var a = reduceEvents([ev("SessionStart"), ev("UserPromptSubmit"), ev("PreToolUse", tool: "Edit", target: "/r/a.swift")])
@@ -53,4 +53,41 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     try h.write(contentsOf: Data((line.dropFirst(10) + "\nnot json\n").utf8)); try h.close()
     #expect(r.poll()["s"]?.count == 1)
     #expect(r.poll().isEmpty)
+}
+@Test func resumedSessionIsNotClosed() {
+    let a = reduceEvents([ev("SessionStart", src: "startup"), ev("SessionEnd"), ev("SessionStart", src: "resume"),
+                          ev("UserPromptSubmit"), ev("Notification", nt: "permission_prompt", msg: "izin")])
+    #expect(!a.ended)
+    #expect(resolveState(activity: a, agent: nil, alive: true, status: nil) == (.waiting, "izin"))
+}
+@Test func compactionKeepsState() {
+    var waiting = reduceEvents([ev("UserPromptSubmit"), ev("Notification", nt: "permission_prompt", msg: "izin")])
+    apply(ev("SessionStart", src: "compact", ts: 5), to: &waiting)
+    #expect(waiting.state == .waiting && waiting.note == "izin" && waiting.lastEventAt == 5)
+    var working = reduceEvents([ev("UserPromptSubmit"), ev("PreToolUse", tool: "Edit", target: "/r/a.swift"),
+                                ev("PostToolUse", tool: "Edit", target: "/r/a.swift")])
+    apply(ev("SessionStart", src: "compact"), to: &working)
+    #expect(working.state == .working && working.action == "Edit · a.swift" && working.touched == ["/r/a.swift"])
+    var done = reduceEvents([ev("UserPromptSubmit"), ev("PreToolUse", tool: "Bash", target: "ls"), ev("Stop", msg: "Soru?", q: true)])
+    apply(ev("SessionStart", src: "startup"), to: &done)
+    #expect(done.state == .turnDone && done.action == nil && done.note == nil)
+}
+@Test func waitingWinsOverStatusProblems() {
+    var waiting = Activity(); waiting.state = .waiting; waiting.note = "Onay?"
+    let problems = SessionStatus(problems: ["build kırık"])
+    #expect(resolveState(activity: waiting, agent: nil, alive: true, status: problems) == (.waiting, "Onay?"))
+    waiting.note = nil
+    #expect(resolveState(activity: waiting, agent: nil, alive: true, status: problems) == (.waiting, "build kırık"))
+    var done = Activity(); done.state = .turnDone
+    #expect(resolveState(activity: done, agent: nil, alive: true, status: problems) == (.problem, "build kırık"))
+}
+@Test func agentViewNotificationsAreIgnored() {
+    let a = reduceEvents([ev("UserPromptSubmit"), ev("Notification", nt: "agent_needs_input", msg: "başka session"),
+                          ev("Notification", nt: "agent_completed")])
+    #expect(a.state == .working && a.note == nil)
+}
+@Test func ownFilePostToolUseEndsWaiting() {
+    let a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "ls"), ev("Notification", nt: "permission_prompt", msg: "izin"),
+                          ev("PostToolUse", tool: "Write", target: "/Users/o/.session-radar/status/s.json")])
+    #expect(a.state == .working && a.note == nil && a.action == "Bash · ls" && a.touched.isEmpty)
 }

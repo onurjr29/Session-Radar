@@ -33,6 +33,7 @@ public func makeHookEvent(from input: [String: Any], now: Double) -> HookEvent? 
     }
 
     switch name {
+    case "SessionStart": e.source = input["source"] as? String
     case "Notification": e.message = (input["message"] as? String).map { String($0.prefix(200)) }
     case "StopFailure": e.message = input["error"] as? String
     case "Stop":

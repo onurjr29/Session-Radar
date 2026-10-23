@@ -14,6 +14,8 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public var message: String?
     public var endsWithQuestion: Bool?
     public var backgroundTasks: Int?
+    /// SessionStart: startup | resume | clear | compact
+    public var source: String?
 }
 
 public struct TodoItem: Codable, Equatable, Sendable { public var text: String; public var done: Bool }
