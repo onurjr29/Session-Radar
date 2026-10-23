@@ -61,3 +61,20 @@ func assistantText(_ text: String) -> String {
     print("SMOKE requests=\(r.requests.count) seconds=\(Date().timeIntervalSince(t0))")
     #expect(r.requests.count > 0)
 }
+@Test func imageRequestsCountWithTheirText() throws {
+    func arrayLine(_ blocks: String) -> String {
+        #"{"type":"user","timestamp":"2026-10-23T01:11:49.379Z","message":{"role":"user","content":[\#(blocks)]}}"#
+    }
+    let lines = [
+        arrayLine(#"{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}},{"type":"text","text":"[Image #1] Bu ekrandaki gri karaltı"}"#),
+        arrayLine(#"{"type":"tool_result","content":"ok"},{"type":"text","text":"araç çıktısı"}"#),
+        arrayLine(#"{"type":"text","text":"[Request interrupted by user]"}"#),
+    ]
+    let r = readRequests(try tempFile(lines.joined(separator: "\n") + "\n"), from: HistoryCursor())
+    #expect(r.requests.map(\.text) == ["[Image #1] Bu ekrandaki gri karaltı"])
+}
+@Test func bareSlashCommandsAreNotRequests() throws {
+    let lines = ["/compact", "  /usage\n", "/plugin:skill", "/Users/x/a.swift neden bozuk", "/review bu PR'ı incele"].map { userLine($0) }
+    let r = readRequests(try tempFile(lines.joined(separator: "\n") + "\n"), from: HistoryCursor())
+    #expect(r.requests.map(\.text) == ["/Users/x/a.swift neden bozuk", "/review bu PR'ı incele"])
+}

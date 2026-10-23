@@ -46,6 +46,17 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(loadTopicFile(url) == f)
     #expect((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int) == 0o600)
 }
+@Test func topicFileWithOtherVersionIsIgnored() throws {
+    let dir = FileManager.default.temporaryDirectory
+    func load(_ version: String) throws -> TopicFile? {
+        let url = dir.appending(path: UUID().uuidString + ".json")
+        try #"{\#(version)"sessionId":"s","grouped":1,"topics":[],"updatedAt":"1970-01-01T00:00:01Z"}"#.write(to: url, atomically: true, encoding: .utf8)
+        return loadTopicFile(url)
+    }
+    #expect(try load("") == nil)
+    #expect(try load(#""version":1,"#) == nil)
+    #expect(try load(#""version":2,"#)?.grouped == 1)
+}
 
 func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false) -> GroupingCandidate {
     GroupingCandidate(id: id, ungrouped: n, state: st, alive: alive, lastRunAt: last, lastRunLeftBacklog: backlog)

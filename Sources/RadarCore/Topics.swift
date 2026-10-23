@@ -12,6 +12,9 @@ public struct Topic: Codable, Equatable, Sendable {
 }
 
 public struct TopicFile: Codable, Equatable, Sendable {
+    /// istek numaralandırması değişince artar; eşleşmeyen dosya yok sayılır ve session baştan gruplanır
+    public static let currentVersion = 2
+    public var version = TopicFile.currentVersion
     public var sessionId: String
     public var grouped: Int
     public var topics: [Topic]
@@ -124,7 +127,7 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
 public func loadTopicFile(_ url: URL) -> TopicFile? {
     guard let data = try? Data(contentsOf: url) else { return nil }
     let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
-    return try? dec.decode(TopicFile.self, from: data)
+    return (try? dec.decode(TopicFile.self, from: data)).flatMap { $0.version == TopicFile.currentVersion ? $0 : nil }
 }
 
 public func saveTopicFile(_ file: TopicFile, to url: URL) throws {

@@ -30,7 +30,17 @@ private let noisyFlags = ["isMeta", "isCompactSummary", "isVisibleInTranscriptOn
 private func isRequestText(_ text: String) -> Bool {
     let t = text.drop(while: \.isWhitespace)
     if t.hasPrefix("<pasted_content") { return true }
+    // tek kelimelik slash komutu (/compact, /plugin:skill) istek sayılmaz
+    if text.trimmingCharacters(in: .whitespacesAndNewlines).wholeMatch(of: /\/[a-z][\w:-]*/) != nil { return false }
     return !t.hasPrefix("<") && !t.hasPrefix("[Request interrupted")
+}
+
+/// String içerik ya da tool_result içermeyen blok dizisinin text blokları (görselli istekler); image blokları yok sayılır.
+private func userText(_ content: Any?) -> String? {
+    if let s = content as? String { return s }
+    guard let blocks = content as? [[String: Any]], !blocks.contains(where: { $0["type"] as? String == "tool_result" }) else { return nil }
+    let texts = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }
+    return texts.isEmpty ? nil : texts.joined(separator: "\n")
 }
 
 // ponytail: uygulama her açılışta transcript'i baştan tarar; çok büyük dosyalarda cursor+istekler diske yazılabilir
@@ -64,7 +74,7 @@ public func readRequests(_ url: URL, from cursor: HistoryCursor, chunkSize: Int 
             if !text.isEmpty { pending = String(text.prefix(2000)) }
             return
         }
-        guard obj["type"] as? String == "user", let text = message["content"] as? String,
+        guard obj["type"] as? String == "user", let text = userText(message["content"]),
               !noisyFlags.contains(where: { obj[$0] as? Bool == true }), isRequestText(text) else { return }
         if requests.isEmpty { trailing = pending } else { requests[requests.count - 1].reply = pending }
         pending = nil
