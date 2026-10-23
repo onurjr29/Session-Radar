@@ -143,6 +143,15 @@ private func waitText(since date: Date, now: Date) -> String {
     return m < 60 ? "\(m) dk" : m < 1440 ? "\(m / 60) sa" : "\(m / 1440) gün"
 }
 
+/// Satırın sağındaki küçük yazı: bekleyende bekleme süresi, çalışanda ve sorunluda ilerleme.
+func trailingText(_ s: SessionSnapshot, now: Date) -> String? {
+    switch s.state {
+    case .waiting: s.waitingSince.map { waitText(since: $0, now: now) }
+    case .working, .problem: s.progress.map { "\($0.done)/\($0.total)" }
+    default: nil
+    }
+}
+
 /// Tıklanabilir satır; renk verilirse kart: hafif renkli zemin, solda şerit.
 private struct Tile<Content: View>: View {
     var tint: Color?
@@ -190,7 +199,7 @@ private struct SessionTile: View {
                     Circle().fill(s.state.color).frame(width: 8, height: 8)
                     Text(s.name).fontWeight(.medium).lineLimit(1)
                     Spacer(minLength: 8)
-                    if let trailing {
+                    if let trailing = trailingText(s, now: now) {
                         Text(trailing).font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
@@ -212,14 +221,6 @@ private struct SessionTile: View {
                 }
                 .padding(.leading, 16)
             }
-        }
-    }
-
-    private var trailing: String? {
-        switch session.state {
-        case .waiting: session.waitingSince.map { waitText(since: $0, now: now) }
-        case .working, .problem: session.progress.map { "\($0.done)/\($0.total)" }
-        default: nil
         }
     }
 }
