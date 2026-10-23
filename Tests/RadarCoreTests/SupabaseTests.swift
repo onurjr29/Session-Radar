@@ -50,7 +50,7 @@ private func bodyString(_ r: URLRequest) -> String { String(decoding: r.httpBody
     let up = rec.requests[0]
     #expect(up.httpMethod == "POST")
     #expect(up.url?.path == "/rest/v1/claims")
-    #expect(up.url?.query == "on_conflict=owner_id,session_id")
+    #expect(up.url?.query == "on_conflict=owner_id,session_id&columns=owner_id,owner_name,session_id,repo_key,branch,topic,open_topics,working,last_request_at")
     #expect(up.value(forHTTPHeaderField: "Prefer") == "resolution=merge-duplicates,return=minimal")
     #expect(up.value(forHTTPHeaderField: "Authorization") == "Bearer AT")
     #expect(up.value(forHTTPHeaderField: "apikey") == "ANON")
@@ -109,4 +109,16 @@ private func bodyString(_ r: URLRequest) -> String { String(decoding: r.httpBody
     #expect(bodyString(r).contains(#""refresh_token":"RT""#))
     #expect(renewed.accessToken == "AT2")
     #expect(renewed.expiresAt == now.addingTimeInterval(3600))
+}
+
+@Test func publishMixedNilBranchSendsColumnsList() async throws {
+    let rec = Recorder()
+    var a = claim("s1"); a.branch = nil
+    var b = claim("s2"); b.branch = "main"
+    try await client(rec).publish([a, b], as: session())
+    let up = rec.requests[0]
+    #expect(up.url?.query == "on_conflict=owner_id,session_id&columns=owner_id,owner_name,session_id,repo_key,branch,topic,open_topics,working,last_request_at")
+    #expect(bodyString(up).contains(#""session_id":"s1""#))
+    #expect(bodyString(up).contains(#""session_id":"s2""#))
+    #expect(rec.requests.count == 2)
 }

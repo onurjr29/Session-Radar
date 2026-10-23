@@ -20,6 +20,9 @@ public enum SupabaseError: Error, Equatable { case http(Int, String), badRespons
 
 public typealias HTTPTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
+/// eksik anahtarlar (ör. branch nil) NULL olur; paylaşılan alanların sunucu tarafı izin listesi
+let upsertColumns = "owner_id,owner_name,session_id,repo_key,branch,topic,open_topics,working,last_request_at"
+
 public struct SupabaseClient: Sendable {
     let config: SupabaseConfig
     let transport: HTTPTransport
@@ -46,7 +49,7 @@ public struct SupabaseClient: Sendable {
             let mine = claims.map { c -> TeamClaim in var c = c; c.ownerId = s.userId; return c }
             let enc = JSONEncoder()
             enc.dateEncodingStrategy = .iso8601
-            _ = try await send("POST", "/rest/v1/claims?on_conflict=owner_id,session_id", body: enc.encode(mine), session: s,
+            _ = try await send("POST", "/rest/v1/claims?on_conflict=owner_id,session_id&columns=\(upsertColumns)", body: enc.encode(mine), session: s,
                                prefer: "resolution=merge-duplicates,return=minimal")
             del += "&session_id=not.in.(\(claims.map(\.sessionId).joined(separator: ",")))"
         }
