@@ -53,7 +53,10 @@ Session'lar ilerledikçe konu değiştiriyor. Onur bu bilgilerin, session kapana
   - Gruplama yalnızca yeni istek varsa çalışır.
   - Her çağrıya yalnızca yeni istekler ve mevcut konu listesi gider.
 - **Arayüzü bloklamak.** Konuşma kaydı okuma ve Haiku çağrıları ana thread'de yapılmaz.
-- **Hatalı model çıktısıyla geçmişi bozmak.** Haiku'nun cevabı geçerli JSON değilse ya da beklenen şemaya uymuyorsa mevcut konu listesi aynen korunur ve bir sonraki fırsatta yeniden denenir.
+- **Hatalı model çıktısıyla geçmişi bozmak.** Haiku'nun cevabı geçerli JSON değilse ya da beklenen şemaya uymuyorsa mevcut konu listesi aynen korunur ve sonraki bir fırsatta yeniden denenir.
+  - Üst üste başarısızlıklarda bekleme süresi her seferinde iki katına çıkar (120 sn × 2ⁿ, en fazla 1 saat). Başarı ya da yeni istek gelmesi sayacı sıfırlar.
+  - 3 başarısızlıktan sonra pencerede bunu belirten tek satırlık bir uyarı görünür. *(2026-10-23 düzeltmesi.)*
+- **Konu dosyası sürümü:** Konu dosyaları `version` alanı taşır. Sürümü eşleşmeyen dosya yok sayılır ve session baştan gruplanır, çünkü istek numaralandırması değişirse eski dosyalar yanlış isteklere işaret eder.
 
 ## Kısıtlar
 
@@ -86,7 +89,8 @@ Session'lar ilerledikçe konu değiştiriyor. Onur bu bilgilerin, session kapana
   - Her istek tam olarak bir konuya aittir.
   - Başlıklar ve özetler Türkçedir.
 - **İstek sayılan satırlar** *(Claude'un kararı, gerçek transcript'lerde doğrulandı)*:
-  - Yalnızca `type == "user"` olan ve `message.content` alanı string olan satırlar.
+  - Yalnızca `type == "user"` olan satırlar. `message.content` ya string olmalı, ya da `tool_result` bloğu içermeyen ve en az bir `text` bloğu olan bir dizi. Bu ikinci biçim ekran görüntüsü eklenmiş istekler için geçerli: `text` blokları birleştirilir, `image` blokları yok sayılır. *(2026-10-23 düzeltmesi: ilk örneklem yalnızca string satırlara bakmıştı. Görselli istekler gerçek isteklerin yaklaşık %18'iydi ve kayboluyordu.)*
+  - Tek kelimelik slash komutları istek sayılmaz (ör. `/compact`, `/usage`).
   - Hariç tutulanlar: `isMeta`, `isCompactSummary`, `isVisibleInTranscriptOnly` ya da `isSidechain` alanı `true` olan satırlar; içeriği `<` ile başlayanlar; içeriği `[Request interrupted` ile başlayanlar.
   - `<` ile başlayan satırlar şunlardır: `<task-notification>`, `<command-name>`, `<local-command-stdout>`, `<bash-input>`/`<bash-stdout>` gibi komut ve sistem satırları. Tek istisna `<pasted_content` ile başlayan satırlar, onlar istek sayılır.
   - Son 15 transcript'te string içerikli 252 kullanıcı satırından yalnızca 138'i gerçek istekti. Gerisi bu gürültüydü.
