@@ -29,6 +29,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
     // radar'ın kendi dosyalarına dokunan tool olayları eylem ve dokunulan dosya sayılmaz; yalnızca beklemeyi bitirir
     let own = e.target?.contains("/.session-radar/") == true
     if own && e.event != "PostToolUse" { return }
+    let prevEvent = a.lastEvent  // bu olay işlenmeden önceki son olay
     a.lastEventAt = e.ts
     a.lastEvent = e.event
     if let c = e.cwd { a.cwd = c }
@@ -57,6 +58,9 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
         case "quota_auto_resume_fired": a.state = .working
+        // Esc ile kesilen turda Stop gelmez; ~60 sn sonraki idle_prompt turu bitirir (Stop ile arka plan işi beklenirken dokunma)
+        case "idle_prompt":
+            if a.state == .working && prevEvent != "Stop" { a.state = .turnDone; a.action = nil }
         // agent_needs_input / agent_completed başka bir session hakkındadır; o session kendi hook'larını çalıştırır
         default: break
         }

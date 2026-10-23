@@ -91,3 +91,16 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
                           ev("PostToolUse", tool: "Write", target: "/Users/o/.session-radar/status/s.json")])
     #expect(a.state == .working && a.note == nil && a.action == "Bash · ls" && a.touched.isEmpty)
 }
+@Test func idlePromptEndsInterruptedTurn() {
+    var a = reduceEvents([ev("UserPromptSubmit"), ev("PreToolUse", tool: "Bash", target: "npm test")])
+    apply(ev("Notification", nt: "idle_prompt", msg: "Claude is waiting for your input"), to: &a)
+    #expect(a.state == .turnDone && a.action == nil)
+}
+@Test func idlePromptKeepsBackgroundWaitAndQuestions() {
+    var bg = reduceEvents([ev("UserPromptSubmit"), ev("Stop", bg: 1)])
+    apply(ev("Notification", nt: "idle_prompt"), to: &bg)
+    #expect(bg.state == .working)
+    var q = reduceEvents([ev("UserPromptSubmit"), ev("Stop", msg: "Devam edeyim mi?", q: true)])
+    apply(ev("Notification", nt: "idle_prompt"), to: &q)
+    #expect(q.state == .waiting)
+}
