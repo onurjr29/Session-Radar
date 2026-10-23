@@ -6,8 +6,9 @@ public struct Topic: Codable, Equatable, Sendable {
     public var state: String   // "active" | "open" | "done"
     public var summary: String
     public var requests: [Int]
-    public init(id: Int, title: String, state: String, summary: String, requests: [Int]) {
-        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests
+    public var from: Int?
+    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil) {
+        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests; self.from = from
     }
 }
 
