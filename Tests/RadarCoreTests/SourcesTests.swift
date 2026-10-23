@@ -39,3 +39,10 @@ let fixture = """
     #expect(s?.topics?.map(\.state) == ["done", "active"])
     #expect(loadStatus(try tempFile("{bozuk")) == nil)
 }
+@Test func lastActionSurvivesLaterTextLine() throws {
+    let t = readTranscriptTail(try tempFile("""
+    {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm test"}}]}}
+    {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Bitti."}]}}
+    """))
+    #expect(t.lastAction == "Bash · npm test")
+}

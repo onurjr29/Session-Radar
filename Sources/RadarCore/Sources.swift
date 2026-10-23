@@ -50,8 +50,6 @@ public func readTranscriptTail(_ url: URL, maxBytes: Int = 512_000) -> Transcrip
             if let tool = blocks.last(where: { $0["type"] as? String == "tool_use" }), let name = tool["name"] as? String {
                 let input = tool["input"] as? [String: Any]
                 info.lastAction = describeAction(tool: name, target: (input?["file_path"] ?? input?["command"]) as? String)
-            } else {
-                info.lastAction = nil
             }
         default: continue
         }
