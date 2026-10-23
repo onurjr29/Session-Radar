@@ -37,20 +37,20 @@ struct FlowCanvas: View {
     @State private var viewport = CGSize.zero
     /// kullanıcı kamerayı elle oynattı; "Şu ana dön"e kadar kamera şu anki konuyu takip etmez
     @State private var moved = false
-    @State private var dragStart: (location: CGPoint, camera: Camera)?
-    @State private var pinchStart: (location: CGPoint, camera: Camera)?
+    // hareket sürerken kameraya eklenen fark; hareket bitince ya da iptal edilince kendiliğinden sıfırlanır
+    @GestureState private var drag = CGSize.zero
+    @GestureState private var pinch: (magnification: Double, anchor: CGPoint)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let l = layout
         GeometryReader { geo in
             // boyut state'e geçmeden önceki ilk karede de kamera doğru yerde olsun
-            let cam = viewport == geo.size ? camera : settled(l, geo.size)
+            let cam = live(viewport == geo.size ? camera : settled(l, geo.size), l, geo.size)
             ZStack(alignment: .topLeading) {
                 DotGrid(camera: cam).fill(Color.primary.opacity(0.16))
                 FlowWorld(cards: l.cards, wires: l.wires, start: l.start, selected: $selected)
                     .equatable()
-                    .id(session.id)
                     .scaleEffect(cam.scale, anchor: .topLeading)
                     .offset(x: cam.x, y: cam.y)
             }
@@ -59,7 +59,7 @@ struct FlowCanvas: View {
             .contentShape(Rectangle())
             .background(ScrollCatcher(onScroll: scroll))
             .simultaneousGesture(pan)
-            .simultaneousGesture(pinch)
+            .simultaneousGesture(magnify)
             .overlay(alignment: .bottomLeading) { nowButton.padding(12) }
             .overlay(alignment: .bottomTrailing) { zoomControls(cam.scale).padding(12) }
             .overlay(alignment: .topTrailing) {
@@ -76,26 +76,34 @@ struct FlowCanvas: View {
         .onChange(of: l.nodes) { follow() }
         .onChange(of: l.nowId) { follow() }
         .onChange(of: focus) { _, f in if let f { focus(on: f.topicId) } }
-        .onChange(of: session.id) {
-            moved = false
-            camera = nowCamera(layout, viewport, scale: 1)
-        }
     }
 
     // MARK: Kamera
 
-    private func nowCamera(_ l: CanvasLayout, _ size: CGSize, scale: Double? = nil) -> Camera {
-        clampCamera(focusCamera(on: l.nowFrame, scale: scale ?? camera.scale, viewport: size), content: l.content, viewport: size)
+    private func nowCamera(_ l: CanvasLayout, _ size: CGSize) -> Camera {
+        clampCamera(focusCamera(on: l.nowFrame, scale: camera.scale, viewport: size), content: l.content, viewport: size)
     }
 
     private func settled(_ l: CanvasLayout, _ size: CGSize) -> Camera {
         moved ? clampCamera(camera, content: l.content, viewport: size) : nowCamera(l, size)
     }
 
-    /// elle yapılan her kamera değişikliği buradan geçer
+    /// elle yapılan her kamera değişikliği buradan geçer; kamera yerinden oynamadıysa takip sürer
     private func move(_ c: Camera) {
-        camera = clampCamera(c, content: layout.content, viewport: viewport)
+        let n = clampCamera(c, content: layout.content, viewport: viewport)
+        guard n != camera else { return }
+        camera = n
         moved = true
+    }
+
+    /// sürükleme ve sıkıştırma sürerken ekranda görünen kamera
+    private func live(_ c: Camera, _ l: CanvasLayout, _ size: CGSize) -> Camera {
+        guard drag != .zero || pinch != nil else { return c }
+        var n = c
+        if let p = pinch { n = zoomed(n, to: n.scale * p.magnification, around: p.anchor) }
+        n.x += drag.width
+        n.y += drag.height
+        return clampCamera(n, content: l.content, viewport: size)
     }
 
     private func smooth(_ duration: Double = 0.5) -> Animation? { reduceMotion ? nil : .smooth(duration: duration) }
@@ -149,25 +157,16 @@ struct FlowCanvas: View {
         }
     }
 
-    // başlangıç noktası değiştiyse yeni hareket; iptal edilen hareket eski başlangıcı bırakmasın
     private var pan: some Gesture {
         DragGesture(minimumDistance: 2)
-            .onChanged { v in
-                if dragStart?.location != v.startLocation { dragStart = (v.startLocation, camera) }
-                guard let s = dragStart?.camera else { return }
-                move(Camera(x: s.x + v.translation.width, y: s.y + v.translation.height, scale: s.scale))
-            }
-            .onEnded { _ in dragStart = nil }
+            .updating($drag) { v, d, _ in d = v.translation }
+            .onEnded { v in move(Camera(x: camera.x + v.translation.width, y: camera.y + v.translation.height, scale: camera.scale)) }
     }
 
-    private var pinch: some Gesture {
+    private var magnify: some Gesture {
         MagnifyGesture()
-            .onChanged { v in
-                if pinchStart?.location != v.startLocation { pinchStart = (v.startLocation, camera) }
-                guard let s = pinchStart?.camera else { return }
-                move(zoomed(s, to: s.scale * v.magnification, around: v.startLocation))
-            }
-            .onEnded { _ in pinchStart = nil }
+            .updating($pinch) { v, p, _ in p = (v.magnification, v.startLocation) }
+            .onEnded { v in move(zoomed(camera, to: camera.scale * v.magnification, around: v.startLocation)) }
     }
 
     // MARK: HUD
@@ -243,16 +242,18 @@ struct FlowCanvas: View {
         let info = activeInfo
         let byId = Dictionary(topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var frames: [Int: CGRect] = [:]
+        var shift = 0.0   // geniş kartlardan sonraki sütunlar sağa kayar, aralık her yerde 40 pt kalır
         l.nodes = flowLayout(topics)
         l.nowId = resolveTopicSelection(nil, topics: topics)
         for n in l.nodes {
             guard let t = byId[n.topicId] else { continue }
             let active = t.state == "active"
             let w = active ? activeCardWidth : cardWidth
-            // geniş kart son sütunda sağa, değilse iki yana açılır; komşu karta taşmaz
-            let grow = n.column == l.nodes.count - 1 ? 0 : (w - cardWidth) / 2
-            let f = CGRect(x: Double(n.column) * columnStep + firstColumnX - grow, y: Double(n.lane) * laneStep,
-                           width: w, height: cardHeight + (active ? info?.height ?? 0 : 0))
+            let extra = active ? info?.height ?? 0 : 0
+            // üst şeritteki uzun kart yukarı uzar, ana hattın çizgisini örtmez
+            let f = CGRect(x: Double(n.column) * columnStep + firstColumnX + shift, y: Double(n.lane) * laneStep - (n.lane < 0 ? extra : 0),
+                           width: w, height: cardHeight + extra)
+            shift += w - cardWidth
             frames[t.id] = f
             let color = topicColor(t.state, session: session.state)
             let to = CGPoint(x: f.minX, y: f.minY + portY)
@@ -276,9 +277,11 @@ struct FlowCanvas: View {
 
     private var activeInfo: ActiveInfo? {
         let st = session.status
-        let info = ActiveInfo(action: session.action, task: st?.task, next: st?.next, todo: st?.todo ?? [],
+        var info = ActiveInfo(action: session.action, task: st?.task, next: st?.next, todo: st?.todo ?? [],
                               problems: st?.problems?.filter { !$0.isEmpty } ?? [],
-                              note: session.state == .waiting ? session.note : nil)
+                              note: nil, noteIsProblem: session.state == .problem)
+        // sorun nedeni (çökme, API hatası) yalnızca notta; sorun listesi varsa not onun kopyasıdır
+        if session.state == .waiting || (info.noteIsProblem && info.problems.isEmpty) { info.note = session.note }
         return info.rows == 0 ? nil : info
     }
 
@@ -321,6 +324,7 @@ private struct ActiveInfo: Equatable {
     var todo: [TodoItem]
     var problems: [String]
     var note: String?
+    var noteIsProblem: Bool
 
     var rows: Int { [action, task, next, note].compactMap { $0 }.count + todo.count + problems.count }
     // ponytail: satır sayısından tahmini yükseklik; yalnızca sınır, odak ve mini harita için
@@ -360,16 +364,23 @@ private struct FlowWorld: View, Equatable {
                 StartCapsule(model: start).offset(x: startFrame.minX, y: startFrame.minY)
             }
             ForEach(cards) { c in
-                FlowCard(card: c).equatable()
-                    .onTapGesture { if c.id != placeholderId { selected = c.id } }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(c.selected ? [.isButton, .isSelected] : .isButton)
-                    .overlay(alignment: .topLeading) {
-                        if let tail = c.tail { TailMark(tail: tail).offset(x: c.frame.width, y: portY - 4) }
+                Group {
+                    if c.id == placeholderId {
+                        FlowCard(card: c).equatable().accessibilityElement(children: .combine)
+                    } else {
+                        FlowCard(card: c).equatable()
+                            .onTapGesture { selected = c.id }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(c.selected ? [.isButton, .isSelected] : .isButton)
+                            .accessibilityAction { selected = c.id }
                     }
-                    // yalnızca konum kayar; renk ve içerik ara tonlardan geçmeden değişir
-                    .transaction { $0.animation = nil }
-                    .modifier(Shift(x: c.frame.minX, y: c.frame.minY))
+                }
+                .overlay(alignment: .topLeading) {
+                    if let tail = c.tail { TailMark(tail: tail).offset(x: c.frame.width, y: portY - 4) }
+                }
+                // yalnızca konum kayar; renk ve içerik ara tonlardan geçmeden değişir
+                .transaction { $0.animation = nil }
+                .modifier(Shift(x: c.frame.minX, y: c.frame.minY))
             }
         }
         .animation(reduceMotion ? nil : .smooth(duration: 0.5), value: cards)
@@ -514,7 +525,9 @@ private struct InfoRows: View {
             ForEach(Array(info.problems.enumerated()), id: \.offset) { _, p in
                 row("exclamationmark.triangle.fill", p, .red)
             }
-            if let v = info.note { row("hand.raised.fill", v, .orange, lines: 3) }
+            if let v = info.note {
+                info.noteIsProblem ? row("exclamationmark.triangle.fill", v, .red, lines: 3) : row("hand.raised.fill", v, .orange, lines: 3)
+            }
         }
         .font(.subheadline)
     }
@@ -540,22 +553,25 @@ private struct DotGrid: Shape {
 
     func path(in rect: CGRect) -> Path {
         var step = 18 * camera.scale
-        // ponytail: %56'nın altında her ikinci nokta; çok sık ızgara hem gürültü hem iş
-        if step < 10 { step *= 2 }
-        let r = 1.0
+        // ponytail: ekranda 14 pt'den sık nokta çizilmez (her ikinci nokta); küçük kare elipsten çok daha ucuz
+        while step < 14 { step *= 2 }
+        let d = 1.8
         var x0 = camera.x.truncatingRemainder(dividingBy: step), y0 = camera.y.truncatingRemainder(dividingBy: step)
         if x0 < 0 { x0 += step }
         if y0 < 0 { y0 += step }
-        var p = Path()
-        var x = x0
-        while x <= rect.maxX + r {
-            var y = y0
-            while y <= rect.maxY + r {
-                p.addEllipse(in: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
-                y += step
+        var dots: [CGRect] = []
+        dots.reserveCapacity(Int((rect.width / step + 2) * (rect.height / step + 2)))
+        var y = y0
+        while y <= rect.maxY + d {
+            var x = x0
+            while x <= rect.maxX + d {
+                dots.append(CGRect(x: x - d / 2, y: y - d / 2, width: d, height: d))
+                x += step
             }
-            x += step
+            y += step
         }
+        var p = Path()
+        p.addRects(dots)
         return p
     }
 }
