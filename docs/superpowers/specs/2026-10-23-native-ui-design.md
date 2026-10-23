@@ -167,7 +167,10 @@ Hangi konunun hangisinden sapılarak açıldığına Haiku karar verir. Bir konu
 - **Çakışma uyarıları:** Panelde sorun kartlarıyla aynı biçimde, bekleyenlerin altında gösterilir.
 - **"Çık" düğmesi:** Panelin başlığındaki küçük bir menüye taşınır.
 - **Başlangıç noktası:** Ana hattın en solunda, session'ın başlangıç zamanını gösteren küçük bir kapsül durur. Üzerine gelince ilk istek görünür.
-- **Renkler:** Session durumları için mevcut renk ataması korunur. Konu durumları için yeşil kapandı, turuncu açık kaldı anlamına gelir. Renk değerleri sistem renklerinden alınır.
+- **Renkler:**
+  - Onaylanan taslaklardaki renkler esas alınır; renk değerleri sistem renklerinden gelir.
+  - Session durumları: çalışıyor mavi, seni bekliyor turuncu, sorun kırmızı, tur bitti yeşil, kapandı gri. Mevcut uygulamada çalışıyor yeşil, tur bitti maviydi; bu ikisi yer değiştirir.
+  - Konu durumları: kapandı yeşil, açık kaldı turuncu. Şu anki konu session'ın durum rengini alır.
 - **Sapak bilgisinin doğrulanması:** `from`, var olan başka bir konuyu göstermiyorsa ya da kendisinden sonra başlayan bir konuyu gösteriyorsa yok sayılır.
 - **`from` bilgisinin kalıcılığı:**
   - Mevcut `from` değerleri prompt'ta Haiku'ya geri verilir.
