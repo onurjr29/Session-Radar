@@ -7,8 +7,8 @@ struct PanelView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        PanelContent(sessions: store.sessions, conflicts: store.conflicts,
-                     topics: store.histories.mapValues(\.topics), lastError: store.lastError) { id in
+        PanelContent(sessions: store.sessions, conflicts: store.conflicts, topics: store.histories.mapValues(\.topics),
+                     lastError: store.lastError, now: store.now) { id in
             // pencere açıkken seçim boş bırakılırsa ilk session'a atlar
             if let id { store.selectedSessionId = id }
             openWindow(id: "sessions")
@@ -23,6 +23,8 @@ struct PanelContent: View {
     let conflicts: [Conflict]
     let topics: [String: [Topic]]
     let lastError: String?
+    /// bekleme süreleri bu ana göre
+    let now: Date
     /// nil: pencereyi seçimi değiştirmeden aç
     let open: (String?) -> Void
     @State private var contentHeight: CGFloat = 0
@@ -71,7 +73,8 @@ struct PanelContent: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.borderless)
             .menuIndicator(.hidden)
             .fixedSize()
         }
@@ -95,6 +98,7 @@ struct PanelContent: View {
                         Text(conflictText(c)).lineLimit(2)
                     }
                 }
+                .help(c.files.joined(separator: "\n"))
             }
             ForEach(sessions.filter { $0.state == .working }) { tile($0) }
             if !done.isEmpty {
@@ -113,7 +117,7 @@ struct PanelContent: View {
                 .padding(.leading, 5)
                 .padding(.top, 4)
                 if showDone {
-                    ForEach(done) { SessionTile(session: $0, topics: [], open: open) }
+                    ForEach(done) { SessionTile(session: $0, topics: [], now: now, open: open) }
                 }
             }
         }
@@ -122,7 +126,7 @@ struct PanelContent: View {
     }
 
     private func tile(_ s: SessionSnapshot) -> some View {
-        SessionTile(session: s, topics: topics[s.id] ?? [], open: open)
+        SessionTile(session: s, topics: topics[s.id] ?? [], now: now, open: open)
     }
 
     private func conflictText(_ c: Conflict) -> String {
@@ -134,8 +138,8 @@ struct PanelContent: View {
 }
 
 /// Bekleme süresi: "4 dk", "2 sa", "1 gün".
-private func waitText(since date: Date) -> String {
-    let m = max(1, Int(Date().timeIntervalSince(date) / 60))
+private func waitText(since date: Date, now: Date) -> String {
+    let m = max(1, Int(now.timeIntervalSince(date) / 60))
     return m < 60 ? "\(m) dk" : m < 1440 ? "\(m / 60) sa" : "\(m / 1440) gün"
 }
 
@@ -166,13 +170,16 @@ private struct Tile<Content: View>: View {
             .contentShape(shape)
             .onHover { hovered = $0 }
             .onTapGesture(perform: action)
+            .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, action)
     }
 }
 
 private struct SessionTile: View {
     let session: SessionSnapshot
     let topics: [Topic]
+    let now: Date
     let open: (String?) -> Void
 
     var body: some View {
@@ -189,8 +196,17 @@ private struct SessionTile: View {
                 }
                 Group {
                     if let note = s.note {
-                        if s.state == .waiting { Text("“\(note)”").lineLimit(3) }
-                        if s.state == .problem { Text(note).foregroundStyle(.secondary).lineLimit(1) }
+                        // izin isteği session'ın sözü değil: bekleyen tool ve hedefi, tırnaksız
+                        if s.waitingOnTool {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("İzin bekliyor").font(.caption).foregroundStyle(.secondary)
+                                Text(note).font(.caption.monospaced()).lineLimit(2)
+                            }
+                        } else if s.state == .waiting {
+                            Text("“\(note)”").lineLimit(3)
+                        } else if s.state == .problem {
+                            Text(note).foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                     if !topics.isEmpty { TopicStrip(topics: topics, session: s) }
                 }
@@ -201,8 +217,8 @@ private struct SessionTile: View {
 
     private var trailing: String? {
         switch session.state {
-        case .waiting: session.waitingSince.map(waitText)
-        case .working: session.progress.map { "\($0.done)/\($0.total)" }
+        case .waiting: session.waitingSince.map { waitText(since: $0, now: now) }
+        case .working, .problem: session.progress.map { "\($0.done)/\($0.total)" }
         default: nil
         }
     }

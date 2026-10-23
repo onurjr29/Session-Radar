@@ -104,6 +104,7 @@ public func buildSnapshot(_ i: SessionInputs) -> SessionSnapshot {
         updatedAt: updatedAt,
         currentTopic: topic.current ?? shortTask(i.transcript?.lastPrompt), openTopics: topic.open,
         waitingSince: state == .waiting ? i.activity?.waitingSince.map { Date(timeIntervalSince1970: $0) } : nil,
+        waitingOnTool: state == .waiting && i.activity?.waitingOnTool == true,
         alive: i.alive)
 }
 

@@ -73,6 +73,8 @@ public struct SessionSnapshot: Identifiable, Equatable, Sendable {
     public var openTopics: Int = 0
     /// yalnızca state == .waiting iken dolu
     public var waitingSince: Date? = nil
+    /// bekleme bir izin penceresi için (note bekleyen tool); yalnızca state == .waiting iken true olabilir
+    public var waitingOnTool = false
     /// süreç çalışıyor; beklenmedik kapanan session "sorun" durumunda ama canlı değil
     public var alive = true
 }

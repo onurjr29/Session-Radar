@@ -140,6 +140,17 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     apply(ev("PostToolUse", tool: "Bash", target: "ls", ts: 80), to: &a)
     #expect(a.waitingSince == nil)
 }
+@Test func waitingOnToolOnlyForPermissionPrompt() {
+    var a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "npm run migrate"), ev("Notification", nt: "permission_prompt")])
+    #expect(a.state == .waiting && a.waitingOnTool)
+    apply(ev("Notification", nt: "idle_prompt"), to: &a);                       #expect(a.waitingOnTool)
+    apply(ev("PostToolUse", tool: "Bash", target: "npm run migrate"), to: &a);  #expect(!a.waitingOnTool)
+    apply(ev("Notification", nt: "permission_prompt"), to: &a)
+    apply(ev("PreToolUse", tool: "AskUserQuestion", target: "Hangisi?"), to: &a); #expect(a.state == .waiting && !a.waitingOnTool)
+    apply(ev("Notification", nt: "permission_prompt"), to: &a)
+    apply(ev("Stop", msg: "Devam edeyim mi?", q: true), to: &a);                #expect(a.state == .waiting && !a.waitingOnTool)
+    apply(ev("Notification", nt: "elicitation_dialog", msg: "Token?"), to: &a);  #expect(!a.waitingOnTool)
+}
 @Test func permissionPromptNoteShowsPendingTool() {
     let a = reduceEvents([ev("PreToolUse", tool: "Bash", target: "npm run migrate"),
                           ev("Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash")])

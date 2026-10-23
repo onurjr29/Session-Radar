@@ -14,6 +14,8 @@ public struct Activity: Equatable, Sendable {
     public var pid: Int32?
     /// bekleme durumuna girilen an (epoch sn); beklemedeyken kesintisiz korunur
     public var waitingSince: Double?
+    /// bekleme bir izin penceresi için; note bekleyen tool'dur, session'ın sorusu değil
+    public var waitingOnTool = false
     public init() {}
 }
 
@@ -50,7 +52,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         if a.action == backgroundWaitAction { a.action = nil }  // yeni tur, eski arka plan beklemesi geçerli değil
     case "PreToolUse":
         if e.tool == "AskUserQuestion" {
-            a.state = .waiting; a.note = e.target
+            a.state = .waiting; a.note = e.target; a.waitingOnTool = false
         } else {
             a.state = .working; a.note = nil
             a.action = describeAction(tool: e.tool ?? "", target: e.target)
@@ -63,6 +65,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog":
             // PreToolUse izin penceresinden önce gelir; action bekleyen tool'dur
             a.state = .waiting; a.note = e.notificationType == "permission_prompt" ? (a.action ?? e.message) : e.message
+            a.waitingOnTool = e.notificationType == "permission_prompt"
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
         case "quota_auto_resume_fired": a.state = .working
@@ -76,7 +79,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         if (e.backgroundTasks ?? 0) > 0 {
             a.state = .working; a.action = backgroundWaitAction
         } else if e.endsWithQuestion == true {
-            a.state = .waiting; a.note = e.message; a.action = nil
+            a.state = .waiting; a.note = e.message; a.action = nil; a.waitingOnTool = false
         } else {
             a.state = .turnDone; a.action = nil
         }
@@ -87,6 +90,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
     default: break
     }
     a.waitingSince = a.state == .waiting ? (a.waitingSince ?? e.ts) : nil
+    if a.state != .waiting { a.waitingOnTool = false }
 }
 
 public func reduceEvents(_ events: [HookEvent]) -> Activity {

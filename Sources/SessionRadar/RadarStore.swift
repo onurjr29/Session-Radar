@@ -11,6 +11,8 @@ import UserNotifications
     var histories: [String: SessionHistory] = [:]
     /// pencerede seçili session; gruplama kuyruğunda öncelikli
     var selectedSessionId: String?
+    /// dakikada bir ilerler; eşit snapshot ataması yeniden çizdirmediği için bekleme süresi buna bağlı
+    var now = Date()
 
     private let paths = RadarPaths.fromEnvironment()
     private let engine: Engine
@@ -86,7 +88,9 @@ import UserNotifications
     }
 
     private func tick() async {
-        let r = await engine.tick(now: Date())
+        let t = Date()
+        let r = await engine.tick(now: t)
+        if Int(t.timeIntervalSince1970 / 60) != Int(now.timeIntervalSince1970 / 60) { now = t }
         sessions = r.sessions
         conflicts = r.conflicts
         if histories != r.histories { histories = r.histories }

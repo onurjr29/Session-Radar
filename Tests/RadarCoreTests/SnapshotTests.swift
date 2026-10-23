@@ -177,3 +177,13 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     // kayıt dosyası idle durumuna geçtiyse bekleme bitmiştir
     #expect(snapOf(a, registry: reg("s", pid: 7, status: "idle", at: 950_000)).waitingSince == nil)
 }
+@Test func snapshotCarriesWaitingOnTool() {
+    func snapOf(_ a: Activity, registry: RegistryEntry? = nil) -> SessionSnapshot {
+        buildSnapshot(SessionInputs(sessionId: "s", agent: nil, registry: registry, alive: true, seenAlive: true, activity: a,
+                                    status: nil, transcript: nil, repo: nil, lastSeen: Date(timeIntervalSince1970: 0)))
+    }
+    var a = act(.waiting, at: 900); a.waitingOnTool = true
+    #expect(snapOf(a).waitingOnTool)
+    // izin penceresi kapanıp kayıt dosyası idle'a geçtiyse artık beklemiyor
+    #expect(!snapOf(a, registry: reg("s", pid: 7, status: "idle", at: 950_000)).waitingOnTool)
+}
