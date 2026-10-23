@@ -38,6 +38,24 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     #expect(resolveState(activity: nil, agent: bg, registry: nil, alive: true, seenAlive: true, status: nil).state == .waiting)
     #expect(resolveState(activity: nil, agent: it, registry: nil, alive: true, seenAlive: true, status: nil).state == .working)
 }
+@Test func resolveWithoutEventsTrustsProcessStatus() {
+    func bg(_ status: String?, _ state: String?) -> AgentEntry {
+        AgentEntry(id: "x", pid: 1, sessionId: "s", name: nil, cwd: "/r", kind: "background", startedAt: nil, status: status, state: state)
+    }
+    func st(_ a: AgentEntry?, _ status: String? = nil) -> SessionState {
+        let r = RegistryEntry(pid: 1, sessionId: "s", cwd: "/r", name: nil, kind: "bg", status: status, statusUpdatedAt: 1)
+        return resolveState(activity: nil, agent: a, registry: r, alive: true, seenAlive: true, status: nil).state
+    }
+    // agents'taki state işin son mesajından çıkar; süreç günlerdir boştayken de "working" kalabilir
+    #expect(st(bg("idle", "working")) == .turnDone)
+    #expect(st(bg("busy", "working")) == .working)
+    #expect(st(bg("idle", "blocked")) == .waiting)
+    #expect(st(bg("busy", "blocked")) == .working)
+    // agents satırı yoksa kayıt dosyası
+    #expect(st(nil, "busy") == .working)
+    #expect(st(nil, "waiting") == .waiting)
+    #expect(st(nil, "idle") == .turnDone)
+}
 @Test func resolveStoppedBackgroundIsClosed() {
     let stopped = AgentEntry(id: "x", pid: nil, sessionId: "s", name: nil, cwd: "/r", kind: "background", startedAt: nil, status: nil, state: "blocked")
     #expect(resolveState(activity: nil, agent: stopped, registry: nil, alive: false, seenAlive: true, status: nil).state == .closed)

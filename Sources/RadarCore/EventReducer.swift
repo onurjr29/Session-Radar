@@ -109,15 +109,15 @@ public func resolveState(activity: Activity?, agent: AgentEntry?, registry: Regi
     if let a = activity, a.state == .waiting { return (.waiting, a.note ?? problems) }
     if let problems { return (.problem, problems) }
     if let a = activity { return (a.state, a.note) }
-    guard let agent else { return (.turnDone, nil) }
-    if agent.kind == "background" {
-        switch agent.state {
-        case "working": return (.working, nil)
-        case "blocked": return (.waiting, nil)
-        default: return (.turnDone, nil)
-        }
+    // olay yoksa süreç durumu esas, agents satırı yoksa kayıt dosyasındaki; arka plan işinin state'i son mesajından
+    // çıkar, süreç günlerdir boştayken de "working" kalabilir. "blocked": son mesaj kullanıcıdan bir şey istiyor
+    let status = agent?.status ?? registry?.status
+    if agent?.kind == "background", agent?.state == "blocked", status != "busy" { return (.waiting, nil) }
+    switch status {
+    case "busy": return (.working, nil)
+    case "waiting": return (.waiting, nil)
+    default: return (.turnDone, nil)
     }
-    return (agent.status == "busy" ? .working : .turnDone, nil)
 }
 
 public final class EventLogReader: @unchecked Sendable {
