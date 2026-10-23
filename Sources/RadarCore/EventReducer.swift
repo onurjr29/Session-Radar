@@ -24,12 +24,13 @@ public func describeAction(tool: String, target: String?) -> String {
 }
 
 private let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+// arka plan işi beklenirken gösterilen eylem; idle_prompt bu durumda turu bitirmez
+let backgroundWaitAction = "Arka plan işi bekleniyor"
 
 public func apply(_ e: HookEvent, to a: inout Activity) {
     // radar'ın kendi dosyalarına dokunan tool olayları eylem ve dokunulan dosya sayılmaz; yalnızca beklemeyi bitirir
     let own = e.target?.contains("/.session-radar/") == true
     if own && e.event != "PostToolUse" { return }
-    let prevEvent = a.lastEvent  // bu olay işlenmeden önceki son olay
     a.lastEventAt = e.ts
     a.lastEvent = e.event
     if let c = e.cwd { a.cwd = c }
@@ -41,6 +42,7 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         a.state = .turnDone; a.action = nil; a.note = nil; a.ended = false
     case "UserPromptSubmit":
         a.state = .working; a.note = nil
+        if a.action == backgroundWaitAction { a.action = nil }  // yeni tur, eski arka plan beklemesi geçerli değil
     case "PreToolUse":
         if e.tool == "AskUserQuestion" {
             a.state = .waiting; a.note = e.target
@@ -58,15 +60,15 @@ public func apply(_ e: HookEvent, to a: inout Activity) {
         case "quota_auto_resume_stale", "quota_auto_resume_disabled":
             a.state = .problem; a.note = e.message
         case "quota_auto_resume_fired": a.state = .working
-        // Esc ile kesilen turda Stop gelmez; ~60 sn sonraki idle_prompt turu bitirir (Stop ile arka plan işi beklenirken dokunma)
+        // Esc ile kesilen turda Stop gelmez; ~60 sn sonraki idle_prompt turu bitirir (arka plan işi beklenirken dokunma)
         case "idle_prompt":
-            if a.state == .working && prevEvent != "Stop" { a.state = .turnDone; a.action = nil }
+            if a.state == .working && a.action != backgroundWaitAction { a.state = .turnDone; a.action = nil }
         // agent_needs_input / agent_completed başka bir session hakkındadır; o session kendi hook'larını çalıştırır
         default: break
         }
     case "Stop":
         if (e.backgroundTasks ?? 0) > 0 {
-            a.state = .working; a.action = "Arka plan işi bekleniyor"
+            a.state = .working; a.action = backgroundWaitAction
         } else if e.endsWithQuestion == true {
             a.state = .waiting; a.note = e.message; a.action = nil
         } else {

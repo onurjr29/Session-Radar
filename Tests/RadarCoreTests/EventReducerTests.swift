@@ -104,3 +104,14 @@ func ev(_ name: String, tool: String? = nil, target: String? = nil, nt: String? 
     apply(ev("Notification", nt: "idle_prompt"), to: &q)
     #expect(q.state == .waiting)
 }
+@Test func repeatedIdlePromptKeepsBackgroundWait() {
+    var a = reduceEvents([ev("UserPromptSubmit"), ev("Stop", bg: 1)])
+    apply(ev("Notification", nt: "idle_prompt"), to: &a)
+    apply(ev("Notification", nt: "idle_prompt"), to: &a)
+    #expect(a.state == .working)
+}
+@Test func newPromptClearsStaleBackgroundWait() {
+    var a = reduceEvents([ev("UserPromptSubmit"), ev("Stop", bg: 1), ev("UserPromptSubmit")])
+    apply(ev("Notification", nt: "idle_prompt"), to: &a)
+    #expect(a.state == .turnDone && a.action == nil)
+}
