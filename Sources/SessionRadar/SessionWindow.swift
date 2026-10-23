@@ -101,6 +101,9 @@ private struct SessionDetail: View {
             .navigationTitle(session.name)
             .navigationSubtitle(subtitle.compactMap { $0 }.joined(separator: " · "))
             .toolbar {
+                if store.team.enabled && store.sharingDown {
+                    ToolbarItem { SharingDownMark() }
+                }
                 if history?.grouping == true {
                     ToolbarItem {
                         ProgressView().controlSize(.small).help("Gruplanıyor…")

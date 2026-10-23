@@ -93,6 +93,7 @@ struct SessionRadarApp: App {
             SessionWindow(store: store)
         }
         .defaultSize(width: 980, height: 640)
+        Settings { TeamSettingsView(store: store) }
     }
 }
 

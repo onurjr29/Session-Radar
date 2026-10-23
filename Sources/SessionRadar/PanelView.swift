@@ -8,7 +8,8 @@ struct PanelView: View {
 
     var body: some View {
         PanelContent(sessions: store.sessions, conflicts: store.conflicts, topics: store.histories.mapValues(\.topics),
-                     lastError: store.lastError, now: store.now) { id in
+                     lastError: store.lastError, now: store.now,
+                     sharingDown: store.team.enabled && store.sharingDown) { id in
             // pencere açıkken seçim boş bırakılırsa ilk session'a atlar
             if let id { store.selectedSessionId = id }
             openWindow(id: "sessions")
@@ -25,6 +26,7 @@ struct PanelContent: View {
     let lastError: String?
     /// bekleme süreleri bu ana göre
     let now: Date
+    var sharingDown = false
     /// nil: pencereyi seçimi değiştirmeden aç
     let open: (String?) -> Void
     @State private var contentHeight: CGFloat = 0
@@ -65,8 +67,11 @@ struct PanelContent: View {
                 Text("\(sessions.count) session").font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
+            if sharingDown { SharingDownMark() }
             Menu {
                 Button("Tüm session'lar") { open(nil) }
+                SettingsLink { Text("Ayarlar…") }
+                    .simultaneousGesture(TapGesture().onEnded { NSApp.activate() })
                 Divider()
                 Button("Çık") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
             } label: {
