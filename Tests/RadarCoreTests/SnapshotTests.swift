@@ -90,6 +90,25 @@ private func states(agents: [AgentEntry] = [], registry: [RegistryEntry] = [], a
     var bg = act(.working, at: 900); bg.lastEvent = "Stop"
     #expect(states(registry: [reg("s", pid: 7, status: "idle", at: 950_000)], activities: ["s": bg], live: [7]) == ["s": .working])
 }
+@Test func registryAfterClosedDialogEndsWaiting() {
+    func st(_ a: Activity, _ status: String, at ms: Double) -> SessionState? {
+        states(registry: [reg("s", pid: 7, status: status, at: ms)], activities: ["s": a], live: [7])["s"]
+    }
+    // izin penceresi Esc ya da ret ile kapandı: PostToolUse ve Stop gelmez, kayıt dosyası idle'a geçer
+    var dialog = act(.waiting, at: 900); dialog.lastEvent = "Notification"; dialog.note = "izin"
+    #expect(st(dialog, "idle", at: 950_000) == .turnDone)
+    #expect(resolveState(activity: dialog, agent: nil, registry: reg("s", pid: 7, status: "idle", at: 950_000), alive: true,
+                         seenAlive: true, status: nil) == (.turnDone, nil))
+    // onaylandı, tool hâlâ sürüyor
+    #expect(st(dialog, "busy", at: 950_000) == .working)
+    // pencere açıkken kayıt dosyası "waiting" der
+    #expect(st(dialog, "waiting", at: 950_000) == .waiting)
+    // soru soran tur: idle Stop'tan hemen sonra yazılır, ~60 sn sonra idle_prompt gelir; bekleme sürer
+    var question = act(.waiting, at: 900); question.lastEvent = "Stop"
+    #expect(st(question, "idle", at: 900_030) == .waiting)
+    question.lastEvent = "Notification"; question.lastEventAt = 960
+    #expect(st(question, "idle", at: 900_030) == .waiting)
+}
 @Test func candidatesTakeLivenessFromRegistryThenAgents() {
     let agent = AgentEntry(id: nil, pid: 8, sessionId: "a", name: nil, cwd: "/r", kind: "interactive", startedAt: nil, status: "idle", state: nil)
     // aynı session'ın eski süreçten kalan kaydı canlı olanı gölgelemez

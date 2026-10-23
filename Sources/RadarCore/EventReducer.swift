@@ -99,10 +99,13 @@ public func resolveState(activity: Activity?, agent: AgentEntry?, registry: Regi
         return (.closed, nil)
     }
     var activity = activity
-    // Esc ile kesilen turda Stop gelmez; kayıt dosyası son olaydan sonra idle'a geçtiyse tur bitmiştir
-    if let a = activity, a.state == .working, a.lastEvent != "Stop", registry?.status == "idle",
-       let idleAt = registry?.statusUpdatedAt, let last = a.lastEventAt, idleAt / 1000 > last {
-        activity?.state = .turnDone
+    // Esc ile kesilen turda ya da kapanan izin/soru penceresinde Stop ve PostToolUse gelmez; kayıt dosyası son olaydan
+    // sonra idle'a geçtiyse tur bitmiş, busy'ye geçtiyse sürüyordur (pencere açıkken "waiting" yazar).
+    // Stop'tan hemen sonra yazılan idle soru soran turun beklemesini bitirmez
+    if let a = activity, a.state == .working || a.state == .waiting, a.lastEvent != "Stop",
+       let s = registry?.status, s == "idle" || s == "busy",
+       let at = registry?.statusUpdatedAt, let last = a.lastEventAt, at / 1000 > last {
+        activity?.state = s == "idle" ? .turnDone : .working; activity?.note = nil
     }
     let problems = status?.problems.flatMap { p in p.contains(where: { !$0.isEmpty }) ? p.joined(separator: "; ") : nil }
     // "seni bekliyor" sorunların altında kaybolmasın
