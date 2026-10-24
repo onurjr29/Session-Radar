@@ -73,3 +73,37 @@ Task ve son incelemelerden kalan, birleştirmeyi engellemeyen bulgular:
 - Pencere: adım listesi seçimden sonra 300 ms × 2 kaydırıyor; bu sürede elle kaydırma geri çekilir. Gün aşan konuların istek satırları yalnızca saat gösteriyor.
 - Panel: konu şeridi noktaları VoiceOver'da ayrı ayrı seçilemiyor (kart tek öğe). İzin isteğinde ne tool ne mesaj varsa kartta durum dosyasındaki sorun metni görünebilir (nadir).
 - Elle doğrulanacaklar: cam görünümü, hover ve tıklamalar, kaydırma/yakınlaştırma, VoiceOver.
+
+## Anıl entegrasyonu planı (2026-10-24-anil-entegrasyonu)
+
+Task ve son incelemelerden kalan, birleştirmeyi engellemeyen bulgular:
+
+**Kayıtlar ve notlar**
+- Boş (nil değil) `status.task` aktif konuya düşmüyor, kayıt atlanıyor.
+- Boşa inen açık konu başlıkları süzülmüyor.
+- Bash hedefi ilk satır ve 120 karakter. Uzun bir zincirde `git commit` reddi kaçabilir; `git push` reddi yine yakalar.
+- Paralel PreToolUse çağrıları aynı push'u iki kez reddedebilir, çünkü delivered dosyasında kilit yok.
+- compact/resume sırasında state.json yoksa `ruleSent` true kalır ve kural yeniden gönderilmez.
+- Bildirim başlığında repo ve branch adı `teamText`'ten geçmiyor.
+
+**Uygulama döngüsü**
+- `notified` yalnızca bellekte tutuluyor. Her yeniden açılışta pull edilmemiş push tekrar bildiriliyor.
+- İptal edilmiş bir refresh token "paylaşım kapalı" olarak görünüyor, yeniden giriş yapma ipucu yok.
+- Çıkış bir ağ adımının ortasında olursa karşı tarafın kayıtları bir kez yerel duruma yazılıyor.
+- Hata metni ham olarak gösteriliyor (`badResponse`).
+- `delivered` yolu iki yerde tekrar ediyor.
+- `merge-base` çıkış kodu 1 ile 128 birbirinden ayrılmıyor.
+
+**Arayüz ve betikler**
+- `team.enabled && sharingDown` iki yerde tekrar ediyor.
+- Giriş yapılmış ama e-posta boşsa E-posta satırı boş görünüyor.
+- `build-app.sh --zip --install` yalnızca zip üretiyor.
+- Şemada `touch_claims` için `search_path` ayarı yok ve politikalarda düz `auth.uid()` kullanılıyor. Supabase advisor bunları lint olarak gösterecek.
+
+### Canlıya alırken kontrol edilecekler (Task 8)
+
+- Zip'i göndermeden önce Supabase'de yeni kayıtları kapat. anon anahtarı uygulamanın içinde gidiyor.
+- İki makinede aynı repo için normalize edilmiş remote aynı olmalı. ssh Host takma adı farklı bir anahtar üretir ve Ayarlar yalnızca repo adını gösterdiği için bu fark görünmez.
+- "Ayarlar…" penceresi öne açılmalı. Açılmıyorsa yedek çözüm `openSettings` kullanan bir Button.
+- Arka planda çalışan `git fetch` terminal olmadan kimlik doğrulayabilmeli. Repo başına tanımlı `core.sshCommand`, bizim `GIT_SSH_COMMAND` ile eziliyor. 1Password ssh-agent kullanılıyorsa her 3 dakikada bir onay istemi çıkabilir.
+- Şemadaki açık `grant` satırı çalıştı mı, kontrol et.
