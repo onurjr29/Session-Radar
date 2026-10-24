@@ -36,6 +36,15 @@ struct TeamSettingsView: View {
             }
             Section {
                 Toggle("Çakışma uyarılarını aç", isOn: $store.team.enabled)
+            } header: {
+                Text("Paylaşım")
+            } footer: {
+                Text("Açıkken, seçtiğin repolarda aynı konu ve yeni push'lar için uyarır.")
+            }
+            Section {
+                if repos.isEmpty {
+                    Text("Bir repoda session açınca burada görünür.").foregroundStyle(.secondary)
+                }
                 ForEach(repos, id: \.key) { repo in
                     Toggle(repo.name, isOn: Binding(
                         get: { store.team.sharedRepos.contains(repo.key) },
@@ -44,8 +53,9 @@ struct TeamSettingsView: View {
                             if on { store.team.sharedRepos.append(repo.key) }
                         }))
                 }
+                .disabled(!store.team.enabled)
             } header: {
-                Text("Paylaşım")
+                Text("Paylaşılan repolar")
             } footer: {
                 Text("Yalnızca seçtiğin repolarda ad, branch ve konu başlığı paylaşılır.")
             }
@@ -55,13 +65,16 @@ struct TeamSettingsView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Açık session'lardaki tekrarsız repolar
+    /// Açık session'lardaki tekrarsız repolar, ardından seçili ama artık açık olmayanlar
     private var repos: [(key: String, name: String)] {
         var seen = Set<String>()
-        return store.sessions.compactMap { s in
+        let open = store.sessions.compactMap { s -> (key: String, name: String)? in
             guard let key = s.repoKey, seen.insert(key).inserted else { return nil }
             return (key, s.repoName ?? key)
         }
+        let kept = store.team.sharedRepos.filter { seen.insert($0).inserted }
+            .map { (key: $0, name: $0.split(separator: "/").last.map(String.init) ?? $0) }
+        return open + kept
     }
 }
 
