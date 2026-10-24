@@ -60,6 +60,7 @@ private func bodyString(_ r: URLRequest) -> String { String(decoding: r.httpBody
     #expect(del.httpMethod == "DELETE")
     #expect(del.url?.query == "owner_id=eq.u1&session_id=not.in.(s1,s2)")
     #expect(del.value(forHTTPHeaderField: "Authorization") == "Bearer AT")
+    #expect(rec.requests.allSatisfy { $0.timeoutInterval == 15 })
 }
 
 @Test func publishEmptyDeletesAllMine() async throws {

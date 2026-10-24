@@ -61,6 +61,19 @@ private func topic(_ id: Int, _ title: String, _ state: String) -> Topic {
     #expect(c.openTopics.count == 5)
 }
 
+@Test func claimLengthsCountCodePoints() throws {
+    let emoji = String(repeating: "👍🏽", count: 100)   // 100 grapheme, 200 code point
+    #expect(teamText(emoji, max: 80) == String(repeating: "👍🏽", count: 40))
+    let long = "github.com/" + String(repeating: "e\u{301}", count: 150)   // 161 grapheme, 311 code point
+    var s = claimSnap(repoKey: long)
+    s.branch = long
+    let c = try #require(buildClaims([s], histories: [s.id: claimHistory(topics: [topic(1, emoji, "active")])],
+                                     owner: "Onur", shared: [long], now: now).first)
+    #expect(c.topic.unicodeScalars.count <= 80)
+    #expect(c.repoKey.unicodeScalars.count <= 200)
+    #expect((c.branch?.unicodeScalars.count ?? 999) <= 200)
+}
+
 @Test func teamClaimEncodesSnakeCase() throws {
     let c = TeamClaim(ownerId: nil, ownerName: "O", sessionId: "S", repoKey: "r", branch: nil, topic: "t",
                       openTopics: [], working: true, lastRequestAt: now, updatedAt: nil)

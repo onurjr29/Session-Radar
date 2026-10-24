@@ -4,8 +4,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Supabase ayarı (git'e girmez): --zip'te zorunlu; --install'da yoksa paylaşım yapılandırılmamış kalır.
+# Sondaki \r (CRLF) ve çevreleyen tek/çift tırnak atılır.
+SUPABASE_URL="" SUPABASE_ANON_KEY=""
+if [[ -f config/supabase.env ]]; then
+    for k in SUPABASE_URL SUPABASE_ANON_KEY; do
+        v="$(sed -n "s/^$k=//p" config/supabase.env | head -1)"
+        v="${v%$'\r'}"
+        if [[ $v == \"*\" || $v == \'*\' ]]; then v="${v:1:${#v}-2}"; fi
+        printf -v "$k" '%s' "$v"
+    done
+fi
+
 ARCH_FLAGS=()
 if [[ "${1:-}" == "--zip" ]]; then
+    if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_ANON_KEY" ]]; then
+        echo "Hata: --zip için config/supabase.env gerekli ve içinde SUPABASE_URL ile SUPABASE_ANON_KEY dolu olmalı." >&2
+        exit 1
+    fi
     ARCH_FLAGS=(--arch arm64 --arch x86_64)
 fi
 
@@ -18,10 +34,7 @@ mkdir -p "$APP/Contents/MacOS"
 cp "$BIN/SessionRadar" "$BIN/radar-hook" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 
-# Supabase ayarı (git'e girmez); yoksa paylaşım yapılandırılmamış kalır.
 if [[ -f config/supabase.env ]]; then
-    SUPABASE_URL="$(sed -n 's/^SUPABASE_URL=//p' config/supabase.env | head -1)"
-    SUPABASE_ANON_KEY="$(sed -n 's/^SUPABASE_ANON_KEY=//p' config/supabase.env | head -1)"
     plutil -replace SupabaseURL -string "$SUPABASE_URL" "$APP/Contents/Info.plist"
     plutil -replace SupabaseAnonKey -string "$SUPABASE_ANON_KEY" "$APP/Contents/Info.plist"
 fi

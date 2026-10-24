@@ -184,3 +184,22 @@ private func commitFile(_ name: String, in dir: URL) throws {
     try sh(["remote", "add", "origin", "/nonexistent/x.git"], in: dir)
     #expect(!fetchUpstream(cwd: dir.path, timeout: 10))
 }
+
+/// Takılan git'in hayatta kalan yardımcısı stderr'i tutsa da fetch süre sınırında döner.
+/// terminate() süreç grubunu öldürür; yardımcı SIGTERM'i yok sayarak (ya da grubundan çıkarak) hayatta kalır.
+@Test(.timeLimit(.minutes(1))) func fetchSetsNetworkLimitsAndIgnoresLingeringHelper() throws {
+    let dir = try uniqueDir("fakegit")
+    let fake = dir.appending(path: "git")
+    try """
+    #!/bin/sh
+    echo "$GIT_SSH_COMMAND|$GIT_HTTP_LOW_SPEED_LIMIT|$GIT_HTTP_LOW_SPEED_TIME" > "$(dirname "$0")/env.txt"
+    (trap '' TERM; exec sleep 20) >/dev/null &
+    exec sleep 20
+    """.write(to: fake, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
+    let start = Date()
+    #expect(!fetchUpstream(cwd: dir.path, git: fake.path, timeout: 1))
+    #expect(Date().timeIntervalSince(start) < 10)
+    let env = try String(contentsOf: dir.appending(path: "env.txt"), encoding: .utf8)
+    #expect(env == "ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2|1000|10\n")
+}

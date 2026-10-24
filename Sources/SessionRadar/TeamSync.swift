@@ -9,6 +9,8 @@ actor TeamSync {
     private var lastFetch: [String: Date] = [:]
     /// giriş/çıkışta artar; ağ beklenirken değiştiyse eski oturum auth.json'a geri yazılmaz
     private var authEpoch = 0
+    /// sunucuda kendi kayıtlarım olabilir; paylaşım kapanınca bir kez silinir
+    private var published = false
 
     init(paths: RadarPaths, config: SupabaseConfig?) {
         self.paths = paths
@@ -19,6 +21,7 @@ actor TeamSync {
         -> (notifications: [RadarNotification], down: Bool) {
         let settings = readJSON(TeamSettings.self, from: paths.teamSettingsFile) ?? TeamSettings()
         guard settings.enabled, !settings.sharedRepos.isEmpty else {
+            await unpublish(now: now)
             try? FileManager.default.removeItem(at: paths.teamStateFile)
             return ([], false)
         }
@@ -50,13 +53,13 @@ actor TeamSync {
         let claims = buildClaims(sessions, histories: histories, owner: settings.name, shared: shared, now: now)
         var others: [TeamClaim] = []
         var down = false
-        if let client, !settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let auth = readJSON(AuthSession.self, from: paths.teamAuthFile) {
+        if settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await unpublish(now: now)
+        } else if let client, let auth = readJSON(AuthSession.self, from: paths.teamAuthFile) {
             let epoch = authEpoch
             do {
-                let s = try await client.authorized(auth, now: now)
-                guard epoch == authEpoch else { throw CancellationError() }
-                if s != auth { try writeJSON(s, to: paths.teamAuthFile) }
+                let s = try await authorized(client, auth, epoch: epoch, now: now)
+                published = true
                 try await client.publish(claims, as: s)
                 others = try await client.fetchOthers(as: s, since: now.addingTimeInterval(-teamStaleAfter))
             } catch {
@@ -65,11 +68,27 @@ actor TeamSync {
             }
         }
 
-        try? writeJSON(composeTeamState(now: now, sessions: sessions, shared: shared, others: others, pushes: pushes),
+        // ağ adımları uzun sürebilir; tazelik yazma anından sayılır
+        try? writeJSON(composeTeamState(now: Date(), sessions: sessions, shared: shared, others: others, pushes: pushes),
                        to: paths.teamStateFile)
         let r = pushNotifications(sightings, notified: notified)
         notified = r.notified
         return (r.notes, down)
+    }
+
+    /// Yenilenen oturum auth.json'a yazılır (refresh token tek kullanımlık); giriş/çıkış araya girdiyse CancellationError.
+    private func authorized(_ client: SupabaseClient, _ auth: AuthSession, epoch: Int, now: Date) async throws -> AuthSession {
+        let s = try await client.authorized(auth, now: now)
+        guard epoch == authEpoch else { throw CancellationError() }
+        if s != auth { try writeJSON(s, to: paths.teamAuthFile) }
+        return s
+    }
+
+    /// Paylaşım kapatıldı, repo listesi boşaldı ya da ad silindi: kendi kayıtlarım bir kez silinir; hata yutulur.
+    private func unpublish(now: Date) async {
+        guard published, let client, let auth = readJSON(AuthSession.self, from: paths.teamAuthFile) else { return }
+        published = false
+        _ = try? await client.publish([], as: authorized(client, auth, epoch: authEpoch, now: now))
     }
 
     /// Hata metni döner; başarıda nil.

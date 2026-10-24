@@ -16,16 +16,18 @@ struct ProcessResult {
 
 /// Senkron süreç çalıştırıcı: stdin verilirse yazılıp kapatılır, stdout/stderr eşzamanlı boşaltılır,
 /// süre aşılırsa süreç öldürülür. Başlatılamazsa nil.
+/// discardStderr: stderr /dev/null'a gider; öldürülen sürecin hayatta kalan alt süreci boru tutup bekletemez.
 func runProcess(_ executable: String, _ args: [String], cwd: String? = nil, stdin: Data? = nil,
-                environment: [String: String]? = nil, timeout: TimeInterval) -> ProcessResult? {
+                environment: [String: String]? = nil, discardStderr: Bool = false, timeout: TimeInterval) -> ProcessResult? {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: executable)
     p.arguments = args
     if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
     if let environment { p.environment = environment }
-    let out = Pipe(), err = Pipe(), inp = Pipe()
+    let out = Pipe(), inp = Pipe()
+    let err = discardStderr ? nil : Pipe()
     p.standardOutput = out
-    p.standardError = err
+    p.standardError = err ?? FileHandle.nullDevice
     p.standardInput = stdin == nil ? FileHandle.nullDevice : inp
     do { try p.run() } catch { return nil }
     let timedOut = Box(false)
@@ -33,10 +35,12 @@ func runProcess(_ executable: String, _ args: [String], cwd: String? = nil, stdi
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
     let group = DispatchGroup()
     let errData = Box(Data())
-    group.enter()
-    DispatchQueue.global().async {
-        errData.value = err.fileHandleForReading.readDataToEndOfFile()
-        group.leave()
+    if let err {
+        group.enter()
+        DispatchQueue.global().async {
+            errData.value = err.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
     }
     if let stdin {
         // süreç stdin'i okumadan çıkarsa yazma SIGPIPE yerine EPIPE alsın; atan write(contentsOf:) hatayı yutar

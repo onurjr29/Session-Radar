@@ -45,12 +45,56 @@ private func event(_ name: String, tool: String? = nil, target: String? = nil, c
     let ctx = try #require(r.context)
     #expect(ctx.hasPrefix("Ekip: Bu repo (eventpal-mobile)"))
     #expect(ctx.contains("Ekip notu (eventpal-mobile)"))
+    #expect(r.delivered.ruleSent)
     #expect(teamHook(event("SessionStart", cwd: "/r/mobile2"), state: st, delivered: TeamDelivered(), now: now).context == nil)
+}
+
+@Test func ruleSentOnceOnFirstEventWhenMissedAtStart() throws {
+    let start = teamHook(event("SessionStart"), state: nil, delivered: TeamDelivered(), now: now)
+    #expect(start.context == nil && !start.delivered.ruleSent)
+    let r1 = teamHook(event("UserPromptSubmit"), state: state(), delivered: start.delivered, now: now)
+    let ctx = try #require(r1.context)
+    #expect(ctx.hasPrefix(teamRule(repoName: "eventpal-mobile") + "\n\nEkip notu (eventpal-mobile)"))
+    #expect(r1.delivered.ruleSent)
+    #expect(teamHook(event("UserPromptSubmit"), state: state(), delivered: r1.delivered, now: now).context == nil)
+    let r2 = teamHook(event("UserPromptSubmit"), state: state(claims: [claim(topic: "Başka konu")]), delivered: r1.delivered, now: now)
+    #expect(r2.context?.hasPrefix("Ekip notu") == true)
+    // kayıt yoksa yalnızca kural
+    let bare = teamHook(event("PostToolUse"), state: state(claims: []), delivered: TeamDelivered(), now: now)
+    #expect(bare.context == teamRule(repoName: "eventpal-mobile") && bare.delivered.ruleSent)
+}
+
+@Test func deliveredDecodesOldFiles() throws {
+    let old = try JSONDecoder().decode(TeamDelivered.self, from: Data(#"{"claimsKey":"x","pushHead":"h1"}"#.utf8))
+    #expect(old == TeamDelivered(pushHead: "h1"))
+    #expect(try JSONDecoder().decode(TeamDelivered.self, from: Data("{}".utf8)) == TeamDelivered())
+}
+
+@Test func noteNotResentAfterClaimsFlap() {
+    func prompt(_ topic: String?, _ d: TeamDelivered) -> TeamHookResult {
+        teamHook(event("UserPromptSubmit"), state: state(claims: topic.map { [claim(topic: $0)] } ?? []), delivered: d, now: now)
+    }
+    let a = prompt("A", TeamDelivered(ruleSent: true))
+    #expect(a.context?.contains("\"A\"") == true)
+    // A → kayıt yok → A
+    let gap = prompt(nil, a.delivered)
+    #expect(gap.context == nil && gap.delivered == a.delivered)
+    #expect(prompt("A", gap.delivered).context == nil)
+    // A → B → A
+    let b = prompt("B", a.delivered)
+    #expect(b.context?.contains("\"B\"") == true)
+    #expect(prompt("A", b.delivered).context == nil)
+    // en fazla 8 anahtar, en yeni sonda
+    var d = TeamDelivered(ruleSent: true)
+    for i in 1...10 { d = prompt("K\(i)", d).delivered }
+    #expect(d.claimsKeys.count == 8 && d.claimsKeys.last?.contains("K10") == true)
+    #expect(prompt("K3", d).context == nil)
+    #expect(prompt("K1", d).context != nil)
 }
 
 @Test func promptNoteSentOnceUntilClaimsChange() {
     let st = state()
-    let r1 = teamHook(event("UserPromptSubmit"), state: st, delivered: TeamDelivered(), now: now)
+    let r1 = teamHook(event("UserPromptSubmit"), state: st, delivered: TeamDelivered(ruleSent: true), now: now)
     #expect(r1.context != nil)
     #expect(teamHook(event("UserPromptSubmit"), state: st, delivered: r1.delivered, now: now).context == nil)
     let r3 = teamHook(event("PostToolUse"), state: state(claims: [claim(topic: "Başka konu")]), delivered: r1.delivered, now: now)
@@ -58,8 +102,9 @@ private func event(_ name: String, tool: String? = nil, target: String? = nil, c
 }
 
 @Test func staleClaimsAreIgnored() {
-    #expect(teamHook(event("UserPromptSubmit"), state: state(claims: [claim(updated: -301)]), delivered: TeamDelivered(), now: now).context == nil)
-    #expect(teamHook(event("UserPromptSubmit"), state: state(claims: [claim(last: -(8 * 3600 + 1))]), delivered: TeamDelivered(), now: now).context == nil)
+    let d = TeamDelivered(ruleSent: true)
+    #expect(teamHook(event("UserPromptSubmit"), state: state(claims: [claim(updated: -301)]), delivered: d, now: now).context == nil)
+    #expect(teamHook(event("UserPromptSubmit"), state: state(claims: [claim(last: -(8 * 3600 + 1))]), delivered: d, now: now).context == nil)
 }
 
 @Test func staleStateIsIgnored() throws {

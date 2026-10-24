@@ -44,11 +44,12 @@ public struct RepoInfo: Equatable, Sendable {
     public var pending: Set<String>
 }
 
-private func run(_ git: String, _ args: [String], cwd: String,
-                 environment extra: [String: String] = [:], timeout: TimeInterval = 10) -> Data? {
+private func run(_ git: String, _ args: [String], cwd: String, environment extra: [String: String] = [:],
+                 discardStderr: Bool = false, timeout: TimeInterval = 10) -> Data? {
     // arka plan poller'ı index.lock almasın
     let env = ProcessInfo.processInfo.environment.merging(["GIT_OPTIONAL_LOCKS": "0"]) { $1 }.merging(extra) { $1 }
-    guard let r = runProcess(git, ["-C", cwd] + args, environment: env, timeout: timeout), r.status == 0 else { return nil }
+    guard let r = runProcess(git, ["-C", cwd] + args, environment: env, discardStderr: discardStderr, timeout: timeout),
+          r.status == 0 else { return nil }
     return r.stdout
 }
 
@@ -79,10 +80,13 @@ public struct IncomingPush: Equatable, Sendable {
     public var files: [String]
 }
 
+/// Ölü bağlantıda ssh ve https kendini bırakır; stderr'i tutan yardımcı da timeout'tan sonra bekletmez.
 public func fetchUpstream(cwd: String, git: String = "/usr/bin/git", timeout: TimeInterval = 30) -> Bool {
     run(git, ["fetch", "--quiet", "--no-tags", "--no-recurse-submodules"], cwd: cwd,
-        environment: ["GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o ConnectTimeout=10"],
-        timeout: timeout) != nil
+        environment: ["GIT_TERMINAL_PROMPT": "0",
+                      "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2",
+                      "GIT_HTTP_LOW_SPEED_LIMIT": "1000", "GIT_HTTP_LOW_SPEED_TIME": "10"],
+        discardStderr: true, timeout: timeout) != nil
 }
 
 /// Upstream'de olup yerelde olmayan commit'ler; upstream yoksa, HEAD detached ise ya da yerel ileride ise nil.

@@ -23,8 +23,18 @@ public struct TeamState: Codable, Equatable, Sendable {
     }
 }
 public struct TeamDelivered: Codable, Equatable, Sendable {
-    public var claimsKey: String?; public var pushHead: String?
-    public init(claimsKey: String? = nil, pushHead: String? = nil) { self.claimsKey = claimsKey; self.pushHead = pushHead }
+    /// son iletilen not anahtarları, en fazla 8, en yeni sonda
+    public var claimsKeys: [String]; public var pushHead: String?; public var ruleSent: Bool
+    public init(claimsKeys: [String] = [], pushHead: String? = nil, ruleSent: Bool = false) {
+        self.claimsKeys = claimsKeys; self.pushHead = pushHead; self.ruleSent = ruleSent
+    }
+    /// eski dosyalarda (claimsKey'li) yeni alanlar yok
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        claimsKeys = try c.decodeIfPresent([String].self, forKey: .claimsKeys) ?? []
+        pushHead = try c.decodeIfPresent(String.self, forKey: .pushHead)
+        ruleSent = try c.decodeIfPresent(Bool.self, forKey: .ruleSent) ?? false
+    }
 }
 public struct TeamSettings: Codable, Equatable, Sendable {
     public var name = ""; public var email = ""; public var enabled = false; public var sharedRepos: [String] = []
@@ -106,14 +116,23 @@ public func teamHook(_ e: HookEvent, state: TeamState?, delivered: TeamDelivered
     let key = claims.isEmpty ? nil : claims.map { "\($0.ownerName)|\($0.sessionId)|\($0.topic)|\($0.openTopics)" }.sorted().joined(separator: "\n")
     let name = ref.repo.split(separator: "/").last.map(String.init) ?? ref.repo
     let note = teamNote(repoName: name, claims: claims, now: now)
+    func withRule(_ n: String?) -> String { teamRule(repoName: name) + (n.map { "\n\n" + $0 } ?? "") }
 
     switch e.event {
     case "SessionStart":
-        r.context = teamRule(repoName: name) + (note.map { "\n\n" + $0 } ?? "")
-        r.delivered.claimsKey = key
+        r.context = withRule(note)
+        r.delivered.claimsKeys = key.map { [$0] } ?? []
+        r.delivered.ruleSent = true
     case "UserPromptSubmit", "PostToolUse":
-        if key != nil && key != delivered.claimsKey { r.context = note }
-        r.delivered.claimsKey = key
+        // kayıt görünmeyince liste değişmez; A → yok → A ya da A → B → A tekrar göndermez
+        var fresh: String?
+        if let key, !delivered.claimsKeys.contains(key) {
+            fresh = note
+            r.delivered.claimsKeys = Array((delivered.claimsKeys + [key]).suffix(8))
+        }
+        // SessionStart'ta durum yoktu (yeni checkout, paylaşım sonradan açıldı): kural ilk olayda bir kez
+        r.context = delivered.ruleSent ? fresh : withRule(fresh)
+        r.delivered.ruleSent = true
     case "PreToolUse":
         guard let push = state.pushes[ref.root], push.head != delivered.pushHead else { break }
         let target = e.target ?? ""

@@ -89,6 +89,7 @@ public struct SupabaseClient: Sendable {
         guard let url = URL(string: path, relativeTo: config.url)?.absoluteURL else { throw SupabaseError.badResponse }
         var req = URLRequest(url: url)
         req.httpMethod = method
+        req.timeoutInterval = 15
         req.setValue(config.anonKey, forHTTPHeaderField: "apikey")
         if let session { req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization") }
         if let prefer { req.setValue(prefer, forHTTPHeaderField: "Prefer") }

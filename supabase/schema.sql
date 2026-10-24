@@ -12,6 +12,8 @@ create table public.claims (
   primary key (owner_id, session_id)
 );
 alter table public.claims enable row level security;
+-- projenin "yeni tabloları aç" varsayılanına dayanmasın
+grant select, insert, update, delete on public.claims to authenticated;
 create policy claims_read on public.claims for select to authenticated using (true);
 create policy claims_insert on public.claims for insert to authenticated with check (owner_id = auth.uid());
 create policy claims_update on public.claims for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());

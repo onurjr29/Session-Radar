@@ -9,7 +9,7 @@ if (( $(sw_vers -productVersion | cut -d. -f1) < 14 )); then
 fi
 
 if command -v claude >/dev/null; then
-    claude --version
+    claude --version || true
 else
     echo "Uyarı: claude komutu bulunamadı; Claude Code kurulana kadar hook'lar çalışmaz."
 fi
