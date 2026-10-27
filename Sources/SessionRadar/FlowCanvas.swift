@@ -253,8 +253,9 @@ struct FlowCanvas: View {
         for n in l.nodes {
             guard let t = byId[n.topicId] else { continue }
             let active = t.state == "active"
-            let w = active ? activeCardWidth : cardWidth
-            let extra = active ? info?.height ?? 0 : 0
+            let cardInfo = active ? info : nil
+            let w = cardInfo == nil ? cardWidth : activeCardWidth
+            let extra = cardInfo?.height(cardWidth: w) ?? 0
             // üst şeritteki uzun kart yukarı uzar, ana hattın çizgisini örtmez
             let f = CGRect(x: Double(n.column) * columnStep + firstColumnX + shift, y: Double(n.lane) * laneStep - (n.lane < 0 ? extra : 0),
                            width: w, height: cardHeight + extra)
@@ -273,7 +274,7 @@ struct FlowCanvas: View {
             }
             l.cards.append(CardModel(id: t.id, title: t.title, symbol: symbol(t.state), color: color,
                                      label: topicStateLabel(t.state, sessionClosed: closed), meta: "\(t.requests.count) istek",
-                                     info: active ? info : nil, active: active, selected: selected == t.id, frame: f, tail: tail))
+                                     info: cardInfo, active: active, selected: selected == t.id, frame: f, tail: tail))
             l.content = l.content.union(f)
         }
         l.nowFrame = l.nowId.flatMap { frames[$0] } ?? l.content
@@ -331,9 +332,15 @@ private struct ActiveInfo: Equatable {
     var note: String?
     var noteIsProblem: Bool
 
-    var rows: Int { [action, task, next, note].compactMap { $0 }.count + todo.count + problems.count }
-    // ponytail: satır sayısından tahmini yükseklik; yalnızca sınır, odak ve mini harita için
-    var height: Double { rows == 0 ? 0 : 13 + Double(rows) * 19 }
+    /// InfoRows'un çizdiği satırlar, aynı sırayla ve aynı satır sınırlarıyla
+    var specs: [CardRowSpec] {
+        [action.map { CardRowSpec($0, maxLines: 1) }, task.map { CardRowSpec($0) }, next.map { CardRowSpec($0) }].compactMap { $0 }
+            + todo.map { CardRowSpec($0.text) } + problems.map { CardRowSpec($0) }
+            + [note.map { CardRowSpec($0, maxLines: 3) }].compactMap { $0 }
+    }
+    var rows: Int { specs.count }
+    // ponytail: karakter sayısından tahmini yükseklik; yalnızca yerleşim, odak ve mini harita için
+    func height(cardWidth: Double) -> Double { infoRowsHeight(specs, charsPerLine: charsPerLine(cardWidth: cardWidth)) }
 }
 
 private struct CardModel: Equatable, Identifiable {
@@ -525,7 +532,7 @@ private struct InfoRows: View {
             if let v = info.task { row("target", v, .primary) }
             if let v = info.next { row("arrow.turn.down.right", v, .primary) }
             ForEach(Array(info.todo.enumerated()), id: \.offset) { _, item in
-                row(item.done ? "checkmark.circle.fill" : "circle", item.text, item.done ? .secondary : .primary, lines: 1)
+                row(item.done ? "checkmark.circle.fill" : "circle", item.text, item.done ? .secondary : .primary)
             }
             ForEach(Array(info.problems.enumerated()), id: \.offset) { _, p in
                 row("exclamationmark.triangle.fill", p, .red)
@@ -537,10 +544,10 @@ private struct InfoRows: View {
         .font(.subheadline)
     }
 
-    private func row(_ symbol: String, _ text: String, _ color: Color, lines: Int = 2, textColor: Color? = nil) -> some View {
+    private func row(_ symbol: String, _ text: String, _ color: Color, lines: Int? = nil, textColor: Color? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol).frame(width: 13).foregroundStyle(color == .primary ? .secondary : color)
-            Text(text).foregroundStyle(textColor ?? color).lineLimit(lines).truncationMode(.middle)
+            Text(text).foregroundStyle(textColor ?? color).lineLimit(lines).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
