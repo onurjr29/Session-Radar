@@ -21,7 +21,7 @@ struct AskBox: View {
             if state.busy {
                 ProgressView().controlSize(.small)
             } else if let answer = state.answer {
-                Text(answer).textSelection(.enabled)
+                Text(answer).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
