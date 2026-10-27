@@ -90,7 +90,8 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(try load("") == nil)
     #expect(try load(#""version":1,"#) == nil)
     #expect(try load(#""version":2,"#) == nil)
-    #expect(try load(#""version":3,"#)?.grouped == 1)
+    #expect(try load(#""version":3,"#) == nil)
+    #expect(try load(#""version":4,"#)?.grouped == 1)
 }
 
 func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = true, last: Date? = nil, backlog: Bool = false, failures: Int = 0) -> GroupingCandidate {
@@ -163,4 +164,36 @@ func cand(_ id: String, _ n: Int, _ st: SessionState = .turnDone, alive: Bool = 
     let p = buildTopicPrompt(existing: existing, requests: [req(3)])
     #expect(p.contains("| sapak: 1") && p.contains("| sapak: -") && p.contains(#""from":null"#))
     #expect(p.contains("- \"from\"") && p.contains(dataNotice))
+}
+
+// MARK: left (açık konuda yarım kalanlar)
+
+@Test func parseLeftSanitizesAndCaps() throws {
+    let long = String(repeating: "u", count: 200)
+    let r = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":"","left":["a\nb","  ","\#(long)","c","d"]}],"assign":{}}"#))
+    #expect(r.topics[0].left.count == 3)
+    #expect(r.topics[0].left[0] == "a b" && r.topics[0].left[1].count == 80 && r.topics[0].left[2] == "c")
+}
+@Test func parseToleratesMalformedLeft() throws {
+    let r = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":"","left":"yarım"},{"id":2,"title":"B","state":"open","summary":"","left":[1,2]},{"id":3,"title":"C","state":"open","summary":""}],"assign":{}}"#))
+    #expect(r.topics.count == 3 && r.topics.allSatisfy { $0.left.isEmpty })
+}
+@Test func mergeKeepsLeftOnlyForOpen() throws {
+    let resp = try #require(parseTopicResponse(#"{"topics":[{"id":1,"title":"A","state":"open","summary":"","left":["x"]},{"id":2,"title":"B","state":"done","summary":"","left":["y"]},{"id":3,"title":"C","state":"active","summary":"","left":["z"]}],"assign":{"1":1,"2":2,"3":3}}"#))
+    let m = try #require(mergeTopics(existing: [], response: resp, newRequests: [req(1), req(2), req(3)]))
+    #expect(m.map(\.state) == ["open", "done", "active"])
+    #expect(m.map(\.left) == [["x"], [], []])
+}
+@Test func oldTopicFileWithoutLeftDecodes() throws {
+    let json = #"{"version":3,"sessionId":"s","grouped":1,"updatedAt":"2026-01-01T00:00:00Z","topics":[{"id":1,"title":"A","state":"open","summary":"","requests":[1]}]}"#
+    let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+    let f = try dec.decode(TopicFile.self, from: Data(json.utf8))
+    #expect(f.topics[0].left.isEmpty)
+}
+@Test func topicPromptHasLeftRuleAndKalan() {
+    let existing = [Topic(id: 1, title: "A", state: "open", summary: "s", requests: [1], left: ["x", "y"]),
+                    Topic(id: 2, title: "B", state: "done", summary: "s", requests: [2])]
+    let p = buildTopicPrompt(existing: existing, requests: [req(3)])
+    #expect(p.contains(#"- "left": konu "open" ise yarım kalan işleri en fazla 3 kısa madde olarak yaz (her biri en fazla 10 kelime); değilse boş liste."#))
+    #expect(p.contains(#""left":[]"#) && p.contains(" | kalan: x; y") && p.contains(" | kalan: -"))
 }

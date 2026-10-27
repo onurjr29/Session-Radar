@@ -253,7 +253,8 @@ struct FlowCanvas: View {
         for n in l.nodes {
             guard let t = byId[n.topicId] else { continue }
             let active = t.state == "active"
-            let cardInfo = active ? info : nil
+            // seçili açık kart da aktif kart gibi genişleyip alt bölümünü gösterir
+            let cardInfo = active ? info : (selected == t.id && t.state == "open" ? openInfo(t) : nil)
             let w = cardInfo == nil ? cardWidth : activeCardWidth
             let extra = cardInfo?.height(cardWidth: w) ?? 0
             // üst şeritteki uzun kart yukarı uzar, ana hattın çizgisini örtmez
@@ -288,6 +289,13 @@ struct FlowCanvas: View {
                               note: nil, noteIsProblem: session.state == .problem)
         // sorun nedeni (çökme, API hatası) notta; resolveState sorun listesini "; " ile birleştirip not yapar, o kopya gösterilmez
         if session.state == .waiting || (info.noteIsProblem && session.note != info.problems.joined(separator: "; ")) { info.note = session.note }
+        return info.rows == 0 ? nil : info
+    }
+
+    /// yarım kalanlar; yoksa konu özeti
+    private func openInfo(_ t: Topic) -> ActiveInfo? {
+        let info = ActiveInfo(todo: [], problems: [], noteIsProblem: false, left: t.left,
+                              summary: t.left.isEmpty && !t.summary.isEmpty ? t.summary : nil)
         return info.rows == 0 ? nil : info
     }
 
@@ -331,12 +339,16 @@ private struct ActiveInfo: Equatable {
     var problems: [String]
     var note: String?
     var noteIsProblem: Bool
+    /// seçili açık kartta yarım kalan işler; boşsa yerine konu özeti
+    var left: [String] = []
+    var summary: String?
 
     /// InfoRows'un çizdiği satırlar, aynı sırayla ve aynı satır sınırlarıyla
     var specs: [CardRowSpec] {
         [action.map { CardRowSpec($0, maxLines: 1) }, task.map { CardRowSpec($0) }, next.map { CardRowSpec($0) }].compactMap { $0 }
             + todo.map { CardRowSpec($0.text) } + problems.map { CardRowSpec($0) }
             + [note.map { CardRowSpec($0, maxLines: 3) }].compactMap { $0 }
+            + left.map { CardRowSpec($0) } + [summary.map { CardRowSpec($0, maxLines: 4) }].compactMap { $0 }
     }
     var rows: Int { specs.count }
     // ponytail: karakter sayısından tahmini yükseklik; yalnızca yerleşim, odak ve mini harita için
@@ -540,6 +552,8 @@ private struct InfoRows: View {
             if let v = info.note {
                 info.noteIsProblem ? row("exclamationmark.triangle.fill", v, .red, lines: 3) : row("hand.raised.fill", v, .orange, lines: 3, textColor: .primary)
             }
+            ForEach(Array(info.left.enumerated()), id: \.offset) { _, v in row("circle", v, .primary) }
+            if let v = info.summary { row("text.alignleft", v, .secondary, lines: 4) }
         }
         .font(.subheadline)
     }

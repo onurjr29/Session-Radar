@@ -8,14 +8,24 @@ public struct Topic: Codable, Equatable, Sendable {
     public var requests: [Int]
     /// bu konunun sapıldığı konunun id'si; yoksa ana iş
     public var from: Int?
-    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil) {
-        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests; self.from = from
+    /// "open" konuda yarım kalan işler (en fazla 3 kısa madde); diğer durumlarda boş
+    public var left: [String]
+    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil, left: [String] = []) {
+        self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests; self.from = from; self.left = left
+    }
+    private enum CodingKeys: String, CodingKey { case id, title, state, summary, requests, from, left }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id); title = try c.decode(String.self, forKey: .title)
+        state = try c.decode(String.self, forKey: .state); summary = try c.decode(String.self, forKey: .summary)
+        requests = try c.decode([Int].self, forKey: .requests); from = try c.decodeIfPresent(Int.self, forKey: .from)
+        left = try c.decodeIfPresent([String].self, forKey: .left) ?? []
     }
 }
 
 public struct TopicFile: Codable, Equatable, Sendable {
     /// istek numaralandırması ya da durum kuralları değişince artar; eşleşmeyen dosya yok sayılır ve session baştan gruplanır
-    public static let currentVersion = 3
+    public static let currentVersion = 4
     public var version = TopicFile.currentVersion
     public var sessionId: String
     public var grouped: Int
@@ -41,12 +51,14 @@ public struct TopicResponse: Decodable, Equatable, Sendable {
     public struct Item: Decodable, Equatable, Sendable {
         public var id: Int; public var title: String; public var state: String; public var summary: String
         public var from: Int?
-        private enum CodingKeys: String, CodingKey { case id, title, state, summary, from }
+        public var left: [String]
+        private enum CodingKeys: String, CodingKey { case id, title, state, summary, from, left }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(Int.self, forKey: .id); title = try c.decode(String.self, forKey: .title)
             state = try c.decode(String.self, forKey: .state); summary = try c.decode(String.self, forKey: .summary)
             from = (try? c.decodeIfPresent(Int.self, forKey: .from)) ?? nil   // bozuk sapak tüm yanıtı düşürmez
+            left = (try? c.decodeIfPresent([String].self, forKey: .left)) ?? []   // bozuk liste de düşürmez
         }
     }
     public var topics: [Item]
@@ -88,7 +100,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     fmt.dateFormat = "HH:mm"
 
     let topicLines = existing.isEmpty ? "(yok)" : existing.map { t in
-        "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(requestNumbers(t.requests)) | özet: \(t.summary) | sapak: \(t.from.map(String.init) ?? "-")"
+        "- id \(t.id) | \(t.title) | durum: \(t.state) | istekler: \(requestNumbers(t.requests)) | özet: \(t.summary) | sapak: \(t.from.map(String.init) ?? "-") | kalan: \(t.left.isEmpty ? "-" : t.left.joined(separator: "; "))"
     }.joined(separator: "\n")
 
     let reqLines = requests.map { r in
@@ -103,7 +115,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
 
     Kurallar:
     - Yalnızca JSON döndür, başka metin yazma.
-    - Şema: {"topics":[{"id":1,"title":"…","state":"active|open|done","summary":"…","from":null}],"assign":{"12":1}}
+    - Şema: {"topics":[{"id":1,"title":"…","state":"active|open|done","summary":"…","from":null,"left":[]}],"assign":{"12":1}}
     - Mevcut tüm konuları gerektiği gibi güncelleyerek döndür. Yeni bir konu gerekirse id değerini mevcut en büyük id'den büyük ver.
     - Her yeni istek numarasını "assign" içinde tam olarak bir konuya ata (anahtar istek numarası, değer konu id'si). Eski istekleri assign'a yazma.
     - Başlıklar en fazla 6 kelime, özetler en fazla 3 cümle olsun ve Türkçe yazılsın.
@@ -111,6 +123,7 @@ public func buildTopicPrompt(existing: [Topic], requests: [Request]) -> String {
     - "open" yalnızca açıkça yarım kalan, bir şey bekleyen ya da sonra dönüleceği söylenen iş içindir.
     - Mevcut "open" konuları yeni isteklere göre yeniden değerlendir; sonradan bittiği anlaşılıyorsa "done" yap.
     - "from": konu başka bir konu bitmeden ondan sapılarak açıldıysa o konunun id'si; önceki iş bittikten sonra ya da ana iş olarak başladıysa null. Mevcut from değerlerini gerekmedikçe değiştirme. Sapak konunun işi bittiyse ya da ana konuya bağlandıysa onu "done" yap.
+    - "left": konu "open" ise yarım kalan işleri en fazla 3 kısa madde olarak yaz (her biri en fazla 10 kelime); değilse boş liste.
     - Başlıklar gereksiz yere değiştirilmesin.
     - \(dataNotice)
 
@@ -134,6 +147,7 @@ public func parseTopicResponse(_ output: String) -> TopicResponse? {
     for i in r.topics.indices {
         r.topics[i].title = oneLine(r.topics[i].title, max: 80)
         r.topics[i].summary = oneLine(r.topics[i].summary, max: 500)
+        r.topics[i].left = Array(r.topics[i].left.map { oneLine($0, max: 80) }.filter { !$0.isEmpty }.prefix(3))
     }
     return r
 }
@@ -145,7 +159,7 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
     for t in existing { byId[t.id] = t }
     for item in response.topics {
         var t = byId[item.id] ?? Topic(id: item.id, title: "", state: "open", summary: "", requests: [])
-        t.title = item.title; t.state = item.state; t.summary = item.summary; t.from = item.from
+        t.title = item.title; t.state = item.state; t.summary = item.summary; t.from = item.from; t.left = item.left
         byId[item.id] = t
     }
     for r in newRequests {
@@ -158,6 +172,7 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
     for i in topics.indices {
         let isLast = topics[i].requests.max() == maxIndex
         topics[i].state = isLast ? "active" : (topics[i].state == "done" ? "done" : "open")
+        if topics[i].state != "open" { topics[i].left = [] }
     }
     topics.sort { ($0.requests.min() ?? 0) < ($1.requests.min() ?? 0) }
     // geçerli sapak: listede var, kendisi değil, ondan önce başlamış
