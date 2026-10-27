@@ -13,7 +13,7 @@ struct PanelView: View {
             // pencere açıkken seçim boş bırakılırsa ilk session'a atlar
             if let id { store.selectedSessionId = id }
             openWindow(id: "sessions")
-            NSApplication.shared.activate()
+            NSApp.activate() // pencere zaten açıksa onAppear tetiklenmez
         }
     }
 }
@@ -71,7 +71,6 @@ struct PanelContent: View {
             Menu {
                 Button("Tüm session'lar") { open(nil) }
                 SettingsLink { Text("Ayarlar…") }
-                    .simultaneousGesture(TapGesture().onEnded { NSApp.activate() })
                 Divider()
                 Button("Çık") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
             } label: {

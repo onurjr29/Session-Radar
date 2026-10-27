@@ -91,9 +91,32 @@ struct SessionRadarApp: App {
         .menuBarExtraStyle(.window)
         Window("Session Radar", id: "sessions") {
             SessionWindow(store: store)
+                .onAppear { WindowPolicy.opened("sessions") }
+                .onDisappear { WindowPolicy.closed("sessions") }
         }
         .defaultSize(width: 980, height: 640)
-        Settings { TeamSettingsView(store: store) }
+        Settings {
+            TeamSettingsView(store: store)
+                .onAppear { WindowPolicy.opened("settings") }
+                .onDisappear { WindowPolicy.closed("settings") }
+        }
+    }
+}
+
+/// LSUIElement uygulamaları (.accessory) Stage Manager tarafından yönetilmez; pencere açıkken .regular olur.
+/// Küme kullanılır: tekrarlanan onAppear/onDisappear sayacı bozmaz.
+@MainActor enum WindowPolicy {
+    private static var open: Set<String> = []
+
+    static func opened(_ id: String) {
+        open.insert(id)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
+    }
+
+    static func closed(_ id: String) {
+        open.remove(id)
+        if open.isEmpty { NSApp.setActivationPolicy(.accessory) }
     }
 }
 
