@@ -561,7 +561,7 @@ private struct InfoRows: View {
     private func row(_ symbol: String, _ text: String, _ color: Color, lines: Int? = nil, textColor: Color? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol).frame(width: 13).foregroundStyle(color == .primary ? .secondary : color)
-            Text(text).foregroundStyle(textColor ?? color).lineLimit(lines).fixedSize(horizontal: false, vertical: true)
+            Text(text).foregroundStyle(textColor ?? color).lineLimit(lines).truncationMode(lines == 1 ? .middle : .tail).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
