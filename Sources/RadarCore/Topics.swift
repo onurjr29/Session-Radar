@@ -10,16 +10,20 @@ public struct Topic: Codable, Equatable, Sendable {
     public var from: Int?
     /// "open" konuda yarım kalan işler (en fazla 3 kısa madde); diğer durumlarda boş
     public var left: [String]
-    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil, left: [String] = []) {
+    /// kullanıcı radardan kapattı; konuya yeni istek atanana kadar "done" kalır
+    public var closedByUser: Bool
+    public init(id: Int, title: String, state: String, summary: String, requests: [Int], from: Int? = nil, left: [String] = [], closedByUser: Bool = false) {
         self.id = id; self.title = title; self.state = state; self.summary = summary; self.requests = requests; self.from = from; self.left = left
+        self.closedByUser = closedByUser
     }
-    private enum CodingKeys: String, CodingKey { case id, title, state, summary, requests, from, left }
+    private enum CodingKeys: String, CodingKey { case id, title, state, summary, requests, from, left, closedByUser }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(Int.self, forKey: .id); title = try c.decode(String.self, forKey: .title)
         state = try c.decode(String.self, forKey: .state); summary = try c.decode(String.self, forKey: .summary)
         requests = try c.decode([Int].self, forKey: .requests); from = try c.decodeIfPresent(Int.self, forKey: .from)
         left = try c.decodeIfPresent([String].self, forKey: .left) ?? []
+        closedByUser = try c.decodeIfPresent(Bool.self, forKey: .closedByUser) ?? false
     }
 }
 
@@ -172,13 +176,14 @@ public func mergeTopics(existing: [Topic], response: TopicResponse, newRequests:
     for r in newRequests {
         guard let id = response.assign[String(r.index)], byId[id] != nil else { return nil }
         byId[id]?.requests.append(r.index)
+        byId[id]?.closedByUser = false   // yeni istek kapatmayı geçersiz kılar
     }
 
     var topics = byId.values.filter { !$0.requests.isEmpty }
     let maxIndex = topics.compactMap { $0.requests.max() }.max()
     for i in topics.indices {
         let isLast = topics[i].requests.max() == maxIndex
-        topics[i].state = isLast ? "active" : (topics[i].state == "done" ? "done" : "open")
+        topics[i].state = topics[i].closedByUser ? "done" : isLast ? "active" : (topics[i].state == "done" ? "done" : "open")
         if topics[i].state != "open" { topics[i].left = [] }
     }
     topics.sort { ($0.requests.min() ?? 0) < ($1.requests.min() ?? 0) }

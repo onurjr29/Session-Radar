@@ -32,6 +32,7 @@ struct FlowCanvas: View {
     let requests: [Request]
     @Binding var selected: Int?       // konu id'si
     var focus: FocusRequest?          // değişince kamera o karta kayar ve kartı seçer
+    var onClose: (Int) -> Void        // seçili açık kartın "Kapat" düğmesi; konu id'si
 
     @State private var camera = Camera(x: 0, y: 0, scale: 1)
     @State private var viewport = CGSize.zero
@@ -52,7 +53,7 @@ struct FlowCanvas: View {
             let _ = viewport == geo.size ? nil : Task { [size = geo.size] in resize(to: size) }
             ZStack(alignment: .topLeading) {
                 DotGrid(camera: cam).fill(Color.primary.opacity(0.16))
-                FlowWorld(cards: l.cards, wires: l.wires, start: l.start, selected: $selected)
+                FlowWorld(cards: l.cards, wires: l.wires, start: l.start, selected: $selected, onClose: onClose)
                     .equatable()
                     .scaleEffect(cam.scale, anchor: .topLeading)
                     .offset(x: cam.x, y: cam.y)
@@ -235,7 +236,7 @@ struct FlowCanvas: View {
             let f = CGRect(x: firstColumnX, y: 0, width: cardWidth, height: cardHeight)
             let none = "Konu başlıkları henüz çıkarılmadı"
             l.cards = [CardModel(id: placeholderId, title: requests.last?.text ?? none, symbol: "ellipsis", color: .gray,
-                                 label: nil, meta: requests.isEmpty ? nil : none, info: nil, active: false, selected: false,
+                                 label: nil, meta: requests.isEmpty ? nil : none, info: nil, closable: false, active: false, selected: false,
                                  frame: f, tail: nil)]
             if let p = prevMain { l.wires = [WireModel(id: placeholderId, from: p, to: CGPoint(x: f.minX, y: portY), color: lineColor)] }
             l.content = l.content.union(f)
@@ -255,8 +256,9 @@ struct FlowCanvas: View {
             let active = t.state == "active"
             // seçili açık kart da aktif kart gibi genişleyip alt bölümünü gösterir
             let cardInfo = active ? info : (selected == t.id && t.state == "open" ? openInfo(t) : nil)
-            let w = cardInfo == nil ? cardWidth : activeCardWidth
-            let extra = cardInfo?.height(cardWidth: w) ?? 0
+            let closable = selected == t.id && t.state == "open"
+            let w = cardInfo == nil && !closable ? cardWidth : activeCardWidth
+            let extra = (cardInfo?.height(cardWidth: w) ?? 0) + (closable ? closeRowHeight(hasInfo: cardInfo != nil) : 0)
             // üst şeritteki uzun kart yukarı uzar, ana hattın çizgisini örtmez
             let f = CGRect(x: Double(n.column) * columnStep + firstColumnX + shift, y: Double(n.lane) * laneStep - (n.lane < 0 ? extra : 0),
                            width: w, height: cardHeight + extra)
@@ -275,7 +277,7 @@ struct FlowCanvas: View {
             }
             l.cards.append(CardModel(id: t.id, title: t.title, symbol: symbol(t.state), color: color,
                                      label: topicStateLabel(t.state, sessionClosed: closed), meta: "\(t.requests.count) istek",
-                                     info: cardInfo, active: active, selected: selected == t.id, frame: f, tail: tail))
+                                     info: cardInfo, closable: closable, active: active, selected: selected == t.id, frame: f, tail: tail))
             l.content = l.content.union(f)
         }
         l.nowFrame = l.nowId.flatMap { frames[$0] } ?? l.content
@@ -363,6 +365,8 @@ private struct CardModel: Equatable, Identifiable {
     var label: String?
     var meta: String?
     var info: ActiveInfo?
+    /// seçili açık kart: altında "Kapat" düğmesi
+    var closable: Bool
     var active: Bool
     var selected: Bool
     var frame: CGRect
@@ -377,6 +381,7 @@ private struct FlowWorld: View, Equatable {
     let wires: [WireModel]
     let start: StartModel?
     @Binding var selected: Int?
+    var onClose: (Int) -> Void   // karşılaştırmaya girmez
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     nonisolated static func == (a: Self, b: Self) -> Bool { a.cards == b.cards && a.wires == b.wires && a.start == b.start }
@@ -392,11 +397,12 @@ private struct FlowWorld: View, Equatable {
                     if c.id == placeholderId {
                         FlowCard(card: c).equatable().accessibilityElement(children: .combine)
                     } else {
-                        FlowCard(card: c).equatable()
+                        FlowCard(card: c, onClose: { onClose(c.id) }).equatable()
                             .onTapGesture { selected = c.id }
                             .accessibilityElement(children: .combine)
                             .accessibilityAddTraits(c.selected ? [.isButton, .isSelected] : .isButton)
                             .accessibilityAction { selected = c.id }
+                            .accessibilityActions { if c.closable { Button("Konuyu kapat") { onClose(c.id) } } }
                     }
                 }
                 .overlay(alignment: .topLeading) {
@@ -488,6 +494,9 @@ private struct StartCapsule: View {
 
 private struct FlowCard: View, Equatable {
     let card: CardModel
+    var onClose: () -> Void = {}   // karşılaştırmaya girmez
+
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.card == b.card }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -514,10 +523,9 @@ private struct FlowCard: View, Equatable {
                 }
                 if let meta = card.meta { Text(meta).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
             }
-            if let info = card.info {
-                Divider().padding(.vertical, 2)
-                InfoRows(info: info)
-            }
+            if card.info != nil || card.closable { Divider().padding(.vertical, 2) }
+            if let info = card.info { InfoRows(info: info) }
+            if card.closable { Button("Kapat", action: onClose).buttonStyle(.bordered).controlSize(.small) }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

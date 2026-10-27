@@ -80,15 +80,19 @@ public func runHook(stdin: Data, paths: RadarPaths, now: Double, pid: Int32? = n
     let r = teamHook(event, state: state, delivered: old, now: Date(timeIntervalSince1970: now))
     if r.delivered != old { try? writeJSON(r.delivered, to: paths.teamDelivered(event.sessionId)) }
 
+    // yalnızca bağlam taşıyan olaylar notu tüketir (PreToolUse tüketmez)
+    let closed = ["SessionStart", "UserPromptSubmit", "PostToolUse"].contains(event.event)
+        ? closedNoteText(takeClosedNotes(paths.closedNotes(event.sessionId))) : nil
+    let context = [r.context, closed].compactMap { $0 }.joined(separator: "\n\n")
     if event.event == "SessionStart" {
         let base = sessionStartContext(statusFile: paths.statusFile(event.sessionId))
-        return r.context.map { base + "\n\n" + $0 } ?? base
+        return context.isEmpty ? base : base + "\n\n" + context
     }
     var out: [String: Any]
     if let deny = r.deny {
         out = ["hookEventName": event.event, "permissionDecision": "deny", "permissionDecisionReason": deny]
-    } else if let c = r.context {
-        out = ["hookEventName": event.event, "additionalContext": c]
+    } else if !context.isEmpty {
+        out = ["hookEventName": event.event, "additionalContext": context]
     } else { return nil }
     guard let data = try? JSONSerialization.data(withJSONObject: ["hookSpecificOutput": out]) else { return nil }
     return String(data: data, encoding: .utf8)

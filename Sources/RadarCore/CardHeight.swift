@@ -31,3 +31,6 @@ public func infoRowsHeight(_ rows: [CardRowSpec], charsPerLine: Int) -> Double {
 
 /// Kart eninden satır başına yaklaşık karakter: metin eni = en - 24 (dolgu) - 19 (simge + aralık); .subheadline ortalama ~5.8 pt/karakter
 public func charsPerLine(cardWidth: Double) -> Int { max(Int((cardWidth - 24 - 19) / 5.8), 1) }
+
+/// "Kapat" düğme satırının tahmini yüksekliği: küçük bordered düğme 22 pt + üstte 6 pt aralık; bilgi satırı yoksa ayraç/boşluk 13 pt da eklenir
+public func closeRowHeight(hasInfo: Bool) -> Double { (hasInfo ? 0 : 13) + 28 }

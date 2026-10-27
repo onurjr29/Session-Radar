@@ -88,7 +88,8 @@ private struct SessionDetail: View {
         let topics = history?.topics ?? []
         let requests = history?.requests ?? []
         let subtitle: [String?] = [session.repoName, session.branch, session.state.label]
-        FlowCanvas(session: session, topics: topics, requests: requests, selected: $selected, focus: focus)
+        FlowCanvas(session: session, topics: topics, requests: requests, selected: $selected, focus: focus,
+                   onClose: { store.closeTopic($0, in: session.id) })
             // session değişince tuval sıfırdan kurulur ve şu anki konuyla açılır
             .id(session.id)
             .inspector(isPresented: .constant(true)) {

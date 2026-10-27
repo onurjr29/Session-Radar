@@ -96,6 +96,8 @@ public struct RadarPaths: Sendable {
     public var statusDir: URL { root.appending(path: "status") }
     public var askDir: URL { root.appending(path: "ask") }
     public var topicsDir: URL { root.appending(path: "topics") }
+    public var closedDir: URL { root.appending(path: "closed") }
+    public func closedNotes(_ sid: String) -> URL { closedDir.appending(path: "\(sid).json") }
     public var teamDir: URL { root.appending(path: "team") }
     public var teamStateFile: URL { teamDir.appending(path: "state.json") }
     public var teamSettingsFile: URL { teamDir.appending(path: "settings.json") }

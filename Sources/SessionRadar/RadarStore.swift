@@ -98,6 +98,15 @@ import UserNotifications
         if sharingDown != r.down { sharingDown = r.down }
     }
 
+    /// Açık konuyu kapatır; kart bir sonraki tick'i beklemeden güncellenir.
+    func closeTopic(_ topicId: Int, in sessionId: String) {
+        Task {
+            guard let r = await engine.closeTopic(sessionId: sessionId, topicId: topicId) else { return }
+            histories[sessionId]?.topics = r.topics
+            if let e = r.error { lastError = e }
+        }
+    }
+
     /// Taslak soruyu sorar; aynı session'da cevap beklenirken ikinci çağrı başlamaz.
     func sendAsk(_ sessionId: String) {
         let q = (asks[sessionId]?.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -252,7 +261,7 @@ private actor Engine {
 
     func prune() {
         let fm = FileManager.default, cutoff = Date().addingTimeInterval(-7 * 86400)
-        for dir in [paths.eventsDir, paths.statusDir, paths.topicsDir, paths.teamDir.appending(path: "delivered")] {
+        for dir in [paths.eventsDir, paths.statusDir, paths.topicsDir, paths.closedDir, paths.teamDir.appending(path: "delivered")] {
             for url in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             where (mtime(url) ?? .distantFuture) < cutoff {
                 try? fm.removeItem(at: url)
@@ -351,6 +360,21 @@ private actor Engine {
             h.failures += 1
         }
         histories[id] = h
+    }
+
+    /// Konuyu kapatır; güncel konuları ve varsa hata metnini döner (nil: kapatılacak açık konu yok).
+    /// Uçuştaki gruplama işi bozulmaz: finishJob h.topics'i temel alır, bayrak korunur.
+    func closeTopic(sessionId id: String, topicId: Int) -> (topics: [Topic], error: String?)? {
+        guard let h = histories[id], let r = RadarCore.closeTopic(h.topics, id: topicId) else { return nil }
+        // kayıt başarısızsa bellek değişmez
+        do {
+            try saveTopicFile(TopicFile(sessionId: id, grouped: h.grouped, topics: r.topics, updatedAt: Date()), to: paths.topicFile(id))
+        } catch { return (h.topics, "Konu kapatılamadı: \(error.localizedDescription)") }
+        histories[id]?.topics = r.topics
+        do { try appendClosedNote(r.note, to: paths.closedNotes(id)) } catch {
+            return (r.topics, "Claude Code'a not yazılamadı: \(error.localizedDescription)")
+        }
+        return (r.topics, nil)
     }
 
     private func ingest() {
