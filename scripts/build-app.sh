@@ -30,9 +30,24 @@ BIN="$(swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-pat
 APP=build/SessionRadar.app
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/SessionRadar" "$BIN/radar-hook" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+
+# İkon (kaynak: scripts/make-icon.swift). macOS 26+ Liquid Glass ikonu .icon'dan Assets.car'a derlenir;
+# actool yalnız tam Xcode'da var, yoksa yalnız klasik .icns kullanılır. actool kendi .icns'ini de yazar,
+# ardından gelen cp onu klasik çizimle değiştirir.
+if xcrun --find actool >/dev/null 2>&1; then
+    if ! out="$(xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --app-icon AppIcon \
+        --platform macosx --minimum-deployment-target 14.0 --output-partial-info-plist build/actool-icon.plist \
+        --errors --warnings --output-format human-readable-text)"; then
+        echo "$out" >&2
+        exit 1
+    fi
+    rm -f build/actool-icon.plist
+    plutil -replace CFBundleIconName -string AppIcon "$APP/Contents/Info.plist"
+fi
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 if [[ -f config/supabase.env ]]; then
     plutil -replace SupabaseURL -string "$SUPABASE_URL" "$APP/Contents/Info.plist"
