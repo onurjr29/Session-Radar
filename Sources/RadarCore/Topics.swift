@@ -68,6 +68,13 @@ public struct TopicResponse: Decodable, Equatable, Sendable {
 private let maxTextChars = 500
 private let maxReplyChars = 300
 
+/// `grouped`'dan sonraki istekler; tur sürerken (working) son istek henüz cevapsız olduğundan hariç.
+public func groupableRequests(_ requests: [Request], grouped: Int, working: Bool) -> ArraySlice<Request> {
+    let end = working ? requests.count - 1 : requests.count
+    let start = max(grouped, 0)
+    return start < end ? requests[start..<end] : []
+}
+
 public func chunkRequests(_ requests: [Request], maxChars: Int = 30_000) -> [[Request]] {
     var chunks: [[Request]] = []
     var cur: [Request] = []

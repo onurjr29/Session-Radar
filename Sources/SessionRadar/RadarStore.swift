@@ -318,12 +318,12 @@ private actor Engine {
     func nextJob(selected: String?, now: Date) -> (sessionId: String, prompt: String)? {
         let cands = groupOrder.compactMap { o in
             histories[o.id].map {
-                GroupingCandidate(id: o.id, ungrouped: $0.requests.count - $0.grouped, state: o.state, alive: o.alive,
+                GroupingCandidate(id: o.id, ungrouped: groupableRequests($0.requests, grouped: $0.grouped, working: o.state == .working).count, state: o.state, alive: o.alive,
                                   lastRunAt: $0.lastRunAt, lastRunLeftBacklog: $0.lastRunLeftBacklog, failures: $0.failures)
             }
         }
         guard let id = nextGroupingJob(cands, selected: selected, now: now), let h = histories[id] else { return nil }
-        let chunks = chunkRequests(Array(h.requests.dropFirst(h.grouped)))
+        let chunks = chunkRequests(Array(groupableRequests(h.requests, grouped: h.grouped, working: groupOrder.first { $0.id == id }?.state == .working)))
         guard let chunk = chunks.first else { return nil }
         histories[id]?.job = chunk
         histories[id]?.jobLeavesBacklog = chunks.count > 1

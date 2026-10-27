@@ -39,6 +39,15 @@ private func req(_ i: Int, _ t: String = "istek") -> Request { Request(index: i,
     #expect(chunks.flatMap { $0 }.map(\.index) == Array(1...100))
     #expect(chunks.allSatisfy { $0.count * 540 <= 5_000 || $0.count == 1 })   // her istek 500 + 0 + 40
 }
+@Test func groupableExcludesInFlightRequestWhileWorking() {
+    let rs = (1...5).map { req($0) }
+    #expect(groupableRequests(rs, grouped: 2, working: true).map(\.index) == [3, 4])
+    #expect(groupableRequests(rs, grouped: 2, working: false).map(\.index) == [3, 4, 5])
+    #expect(groupableRequests(rs, grouped: 4, working: true).isEmpty)
+    #expect(groupableRequests(rs, grouped: 4, working: false).map(\.index) == [5])
+    #expect(groupableRequests(rs, grouped: 5, working: true).isEmpty && groupableRequests(rs, grouped: 5, working: false).isEmpty)
+    #expect(groupableRequests([], grouped: 0, working: true).isEmpty)
+}
 @Test func promptCarriesSchemaAndTruncates() {
     let p = buildTopicPrompt(existing: [], requests: [Request(index: 7, text: String(repeating: "a", count: 900), at: nil, reply: String(repeating: "b", count: 900))])
     #expect(p.contains("\"assign\"") && p.contains("#7") && !p.contains(String(repeating: "a", count: 501)) && !p.contains(String(repeating: "b", count: 301)))
