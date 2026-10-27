@@ -123,7 +123,7 @@ private struct SessionDetail: View {
                     Button { asking.toggle() } label: { Label("Soru sor", systemImage: "bubble.left") }
                         .help("Soru sor")
                         .popover(isPresented: $asking, arrowEdge: .bottom) {
-                            AskBox(sessionId: session.id, store: store).padding(14).frame(width: 360)
+                            AskBox(sessionId: session.id, store: store, topic: topics.first { $0.id == selected }).padding(14).frame(width: 360)
                         }
                 }
             }

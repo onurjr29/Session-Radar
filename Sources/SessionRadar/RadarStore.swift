@@ -108,23 +108,29 @@ import UserNotifications
     }
 
     /// Taslak soruyu sorar; aynı session'da cevap beklenirken ikinci çağrı başlamaz.
-    func sendAsk(_ sessionId: String) {
+    /// Soru, sorulduğu anda seçili olan konuya (varsa) odaklanır.
+    func sendAsk(_ sessionId: String, topicId: Int?) {
         let q = (asks[sessionId]?.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, asks[sessionId]?.busy != true else { return }
+        let focus = histories[sessionId]?.topics.first { $0.id == topicId }
         asks[sessionId, default: AskState()].busy = true
         asks[sessionId]?.answer = nil
+        asks[sessionId]?.answerTopic = nil
         Task {
-            let answer = await ask(q, about: sessionId)
+            let answer = await ask(q, about: sessionId, focus: focus)
             asks[sessionId, default: AskState()].answer = answer
+            asks[sessionId]?.answerTopic = focus?.title
             asks[sessionId]?.busy = false
         }
     }
 
-    private func ask(_ question: String, about sessionId: String) async -> String {
+    private func ask(_ question: String, about sessionId: String, focus: Topic?) async -> String {
+        let focusRequests = (histories[sessionId]?.requests ?? []).filter { focus?.requests.contains($0.index) == true }
         guard let claude = await claude() else { return "claude bulunamadı" }
         let (status, dialogue) = await engine.askContext(sessionId)
         do {
-            return try await runAsk(prompt: buildAskPrompt(question: question, status: status, topics: histories[sessionId]?.topics ?? [], dialogue: dialogue),
+            return try await runAsk(prompt: buildAskPrompt(question: question, status: status, topics: histories[sessionId]?.topics ?? [],
+                                                            focus: focus, focusRequests: focusRequests, dialogue: dialogue),
                                     claudePath: claude, paths: paths)
         } catch AskError.failed(let m) {
             return "Cevap alınamadı: \(m)"
@@ -202,6 +208,8 @@ import UserNotifications
 struct AskState: Equatable {
     var question = ""
     var answer: String?
+    /// cevabın verildiği konunun başlığı; odak yoksa nil
+    var answerTopic: String?
     var busy = false
 }
 

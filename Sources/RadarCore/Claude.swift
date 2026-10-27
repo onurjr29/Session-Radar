@@ -87,7 +87,8 @@ func dataBlock(_ s: String) -> String {
     return "<veri>\n\(safe)\n</veri>"
 }
 
-public func buildAskPrompt(question: String, status: SessionStatus?, topics: [Topic] = [], dialogue: [String], maxDialogueChars: Int = 20_000) -> String {
+public func buildAskPrompt(question: String, status: SessionStatus?, topics: [Topic] = [], focus: Topic? = nil, focusRequests: [Request] = [],
+                           dialogue: [String], maxDialogueChars: Int = 20_000, maxFocusChars: Int = 8_000) -> String {
     var statusText = "yok"
     if let status {
         let enc = JSONEncoder()
@@ -103,8 +104,25 @@ public func buildAskPrompt(question: String, status: SessionStatus?, topics: [To
         if total > maxDialogueChars { break }
         kept.insert(line, at: 0)
     }
+    var focusIntro = "", focusSection = ""
+    if let focus {
+        focusIntro = " Kullanıcı soruyu \"Sorulan konu\" bölümündeki konu kartını seçerek soruyor; soru başka bir şeyi açıkça sormuyorsa bu konu hakkındadır."
+        // istek blokları da en yeniden geriye doğru toplanır; metin ve cevap ayrı ayrı 2.000 karakterle sınırlı
+        var blocks: [String] = []
+        var used = 0
+        for r in focusRequests.reversed() {
+            var b = "- kullanıcı: \(r.text.prefix(2_000))"
+            if let reply = r.reply { b += "\n  claude: \(reply.prefix(2_000))" }
+            used += b.count + 1
+            if used > maxFocusChars { break }
+            blocks.insert(b, at: 0)
+        }
+        let requestText = blocks.isEmpty ? "istekler: (yok)" : "istekler (eskiden yeniye):\n" + blocks.joined(separator: "\n")
+        let body = "başlık: \(focus.title)\ndurum: \(focus.state)\nözet: \(focus.summary)\nkalan: \(focus.left.isEmpty ? "-" : focus.left.joined(separator: "; "))\n\(requestText)"
+        focusSection = "## Sorulan konu\n\(dataBlock(body))\n\n"
+    }
     return """
-    Aşağıda bir Claude Code session'ı hakkında bilgiler var. Kullanıcının sorusunu yalnızca bu bilgilere dayanarak Türkçe ve kısa (en fazla 5 cümle) cevapla. Bilgi yoksa bilmediğini söyle. Konular session'ın tamamını özetler; son konuşma yalnızca son kısmı gösterir.
+    Aşağıda bir Claude Code session'ı hakkında bilgiler var. Kullanıcının sorusunu yalnızca bu bilgilere dayanarak Türkçe ve kısa (en fazla 5 cümle) cevapla. Bilgi yoksa bilmediğini söyle. Konular session'ın tamamını özetler; son konuşma yalnızca son kısmı gösterir.\(focusIntro)
     \(dataNotice)
 
     ## Durum dosyası
@@ -113,7 +131,7 @@ public func buildAskPrompt(question: String, status: SessionStatus?, topics: [To
     ## Konular (eskiden yeniye)
     \(dataBlock(topicText))
 
-    ## Son konuşma (eskiden yeniye)
+    \(focusSection)## Son konuşma (eskiden yeniye)
     \(dataBlock(kept.joined(separator: "\n")))
 
     ## Soru
